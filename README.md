@@ -46,7 +46,10 @@ later self-host LibreWXR (see [librewxr.net](https://librewxr.net)), point Setti
 ## Development
 
 ```bash
-npm install                # installs root deps + runs renderer's npm install via postinstall
+npm install                # root (Electron) deps
+npm run install:renderer   # renderer (Next.js) deps — deliberately a separate step, not a
+                            # postinstall hook, since nesting the two npm processes is what
+                            # caused Windows CI to hit file-lock EPERM errors during cleanup
 npm run dev                # runs `next dev` and Electron together, with hot reload
 ```
 
