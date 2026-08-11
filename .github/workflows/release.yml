@@ -1,0 +1,45 @@
+name: Release
+
+# Push a tag matching v* (e.g. v1.1.0 — keep it in sync with package.json's
+# "version") to build all three platforms and publish a GitHub Release with
+# every artifact attached. `workflow_dispatch` lets you re-run the same
+# build manually (e.g. to retry a flaky platform) without pushing a new tag.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write # electron-builder needs this to create the release and upload assets
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # AppImage's build step (not just running one) needs libfuse2 on
+      # modern Ubuntu runners, which dropped it from the base image.
+      - name: Install AppImage build dependency (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libfuse2
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build and publish
+        run: npm run dist:publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Unsigned build — stop electron-builder from hunting for a local
+          # code-signing identity on the mac runner's (empty) keychain.
+          CSC_IDENTITY_AUTO_DISCOVERY: false

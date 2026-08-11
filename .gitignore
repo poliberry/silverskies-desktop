@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Electron main-process build output
+dist-electron/
+
+# Next.js
+renderer/.next/
+renderer/out/
+renderer/next-env.d.ts
+renderer/tsconfig.tsbuildinfo
+
+# electron-builder output
+release/
+
+# Local app data (never committed even for local testing — mirrors what
+# ships to each user's real OS userData dir)
+*.local.json
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+
+# Env / secrets — this app stores its own config in the OS userData dir,
+# never in the repo, but keep this out regardless.
+.env
+.env.*

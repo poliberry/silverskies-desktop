@@ -1,0 +1,2309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Silver Skies</title>
+<link rel="icon" id="favicon" type="image/svg+xml" href="https://cdn.jsdelivr.net/gh/mrdarrengriffin/google-weather-icons@main/sets/set-6/dark/sunny.svg">
+<link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<!-- Google Sans Flex — large temp display only (wdth axis for the stretched look). -->
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wdth,wght@100..150,100..700&display=swap" rel="stylesheet">
+<!-- Google Sans — general UI text. Its opsz axis is a near-binary 17..18 toggle (not a
+     wide continuous range like Flex's); 17 is the "Text" optical cut, so it's pinned in
+     the request itself rather than set at runtime via font-variation-settings. -->
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:opsz,wght@17,400..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Code&display=swap" rel="stylesheet">
+<style>
+  html { font-size: 18px; }
+  :root {
+    --a0: 138,100,255;
+    --bg: #0d0d0f;
+    --surface: #141418;
+    --surface-rgb: 20,20,24;
+    --surface3: #1e1e26;
+    --border: rgba(255,255,255,0.07);
+    --border-active: rgba(var(--a0),0.5);
+    --accent: rgb(var(--a0));
+    --accent2: color-mix(in srgb, rgb(var(--a0)) 70%, white);
+    --accent-glow: rgba(var(--a0),0.15);
+    --accent-glow2: rgba(var(--a0),0.08);
+    --text: #f0eeff;
+    --text2: rgba(240,238,255,0.6);
+    --text3: rgba(240,238,255,0.3);
+    --danger: #ff6b6b;
+    --safe: #64ffb4;
+    --arc-line: rgba(255,255,255,0.07);
+    --arc-tick: rgba(255,255,255,0.11);
+    --arc-dash: rgba(255,255,255,0.05);
+    --sun-label: rgba(240,238,255,0.35);
+    --mono: 'Google Sans Code', monospace;
+    --sans: 'Google Sans', sans-serif;
+    --radius: 12px;
+  }
+  /* ── Light mode ── */
+  [data-theme="light"] {
+    --bg: #f2f3f7;
+    --surface: #ffffff;
+    --surface-rgb: 255,255,255;
+    --surface3: #e8eaf0;
+    --border: rgba(0,0,0,0.08);
+    --border-active: rgba(var(--a0),0.4);
+    --accent2: color-mix(in srgb, rgb(var(--a0)) 80%, black);
+    --accent-glow: rgba(var(--a0),0.12);
+    --accent-glow2: rgba(var(--a0),0.06);
+    --text: #0f0e1a;
+    --text2: rgba(15,14,26,0.65);
+    --text3: rgba(15,14,26,0.38);
+    --danger: #cc2222;
+    --safe: #1a8a50;
+    --arc-line: rgba(0,0,0,0.07);
+    --arc-tick: rgba(0,0,0,0.12);
+    --arc-dash: rgba(0,0,0,0.06);
+    --sun-label: rgba(15,14,26,0.4);
+  }
+  [data-theme="light"] .wx-icon-lg { filter: drop-shadow(0 2px 8px rgba(var(--a0),0.18)); }
+  /* Theme dropdown */
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  /* Tabular numbers everywhere digits appear, and a universal letter-spacing bump —
+     both inherit from here. Elements that already declare their own letter-spacing
+     (the big hero numbers/titles, and the mono label chips) keep their own tuned
+     values since an explicit declaration always wins over an inherited one. */
+  body { background:var(--bg); color:var(--text); font-family:var(--sans); min-height:100vh; overflow-x:hidden; position:relative; letter-spacing:0.02em; font-variant-numeric:tabular-nums; }
+
+
+    33%  { transform:translate(-3%,2%) rotate(-2deg) scale(1.03); }
+    66%  { transform:translate(2%,-3%) rotate(1deg) scale(1.05); }
+    100% { transform:translate(3%,1%) rotate(-1deg) scale(1.02); }
+  }
+
+
+    33%  { transform:translate(-3%,2%) rotate(-2deg) scale(1.03); }
+    66%  { transform:translate(2%,-3%) rotate(1deg) scale(1.05); }
+    100% { transform:translate(3%,1%) rotate(-1deg) scale(1.02); }
+  }
+
+
+
+  /* ── Google weather icon sizes ───────────────────────────────────────── */
+  .gw-icon-lg { width:150px; height:150px; display:block; }
+  .gw-icon-md { width:40px;  height:40px;  display:inline-block; }
+  .gw-icon-sm { width:26px;  height:26px;  display:inline-block; }
+  /* ── weather-iconic color wiring ─────────────────────────────────────── */
+  .weather-multi-color {
+    --weather-primary-fill:   rgb(var(--a0));
+    --weather-secondary-fill: color-mix(in srgb, rgb(var(--a0)) 35%, var(--text2));
+  }
+  [data-theme="light"] .weather-multi-color {
+    --weather-secondary-fill: color-mix(in srgb, rgb(var(--a0)) 25%, #888);
+  }
+  /* Size variants matching our existing wx-icon classes */
+  /* weather-iconic size overrides */
+  .weather-icon--xl { font-size:150px; line-height:1; display:block; }
+  .weather-icon--md { font-size:40px;  line-height:1; display:inline-block; }
+  .weather-icon--sm { font-size:26px;  line-height:1; display:inline-block; }
+  /* ── Aero glass cards ────────────────────────────────────────────────── */
+  .stat-card, .hour-card, .forecast-row, .info-card, .sun-card {
+    border-radius: var(--radius) !important;
+  }
+  /* Cursor-tracking specular highlight */
+  .specular {
+    position: absolute; inset: 0; pointer-events: none; z-index: 3;
+    opacity: 0; transition: opacity 0.15s ease; border-radius: inherit;
+  }
+  .stat-card:hover .specular, .hour-card:hover .specular,
+  .forecast-row:hover .specular, .info-card:hover .specular,
+  .sun-card:hover .specular { opacity: 1; }
+
+
+  /* ── Top ambient glow bar ────────────────────────────────────────────── */
+  /* Constant ambient strip across the full width, always on. The moving highlight
+     lives in ::after as its own element so it can carry its own glow and fade in/out
+     at the ends (Vista/7-style marquee) instead of popping at the loop point. */
+  #top-glow {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    z-index: 9999;
+    pointer-events: none;
+    --tg: var(--a0);
+    /* Flat fill, not a gradient that tapers to transparent at the edges — the whole
+       bar should glow, not just its horizontal center. */
+    background: rgba(var(--tg), 1);
+    box-shadow:
+      0 0 40px 12px rgba(var(--tg), 0.6),
+      0 0 18px 5px rgba(var(--tg), 0.9),
+      0 3px 60px 20px rgba(var(--tg), 0.32);
+    opacity: 1;
+    transition: background 1.2s ease, box-shadow 1.2s ease;
+  }
+  /* Crisp, unblurred core — travels with ::after and guarantees the line itself stays
+     fully opaque at the sweep's position. Blur alone (::after) dilutes its own peak
+     alpha, which made the line look thin/transparent right where the sweep was. */
+  #top-glow::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -40%;
+    width: 40%; height: 100%;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(var(--tg),0.9) 30%,
+      color-mix(in srgb, white 70%, rgb(var(--tg))) 50%,
+      rgba(var(--tg),0.9) 70%,
+      transparent 100%);
+    opacity: 0;
+    animation: topGlowSweep 5s ease-in-out infinite;
+  }
+  #top-glow::after {
+    content: '';
+    position: absolute;
+    /* Taller than the bar and blurred (not box-shadow) so the glow is one continuous
+       soft gradient with no seam where it overlaps the ambient layer underneath. */
+    top: -6px; left: -40%;
+    width: 40%; height: 16px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(var(--tg),0.85) 30%,
+      color-mix(in srgb, white 60%, rgb(var(--tg))) 50%,
+      rgba(var(--tg),0.85) 70%,
+      transparent 100%);
+    filter: blur(6px);
+    opacity: 0;
+    animation: topGlowSweep 5s ease-in-out infinite;
+  }
+  #top-glow.pulsing {
+    animation: topGlowPulse 1.4s ease-in-out infinite;
+  }
+  #top-glow.pulsing::before,
+  #top-glow.pulsing::after {
+    animation: topGlowSweep 2.1s ease-in-out infinite;
+  }
+  @keyframes topGlowSweep {
+    0%   { left: -40%; opacity: 0; }
+    15%  { opacity: 1; }
+    85%  { opacity: 1; }
+    100% { left: 100%; opacity: 0; }
+  }
+  @keyframes topGlowPulse {
+    0%,100% { opacity: 0.75; }
+    50%      { opacity: 1; }
+  }
+
+
+  /* ── Phosphor alert icons ────────────────────────────────────────────── */
+  .alert-mc-icon {
+    font-size: 1.6em;
+    line-height: 1;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+  /* ── ECCC alert colour tiers ─────────────────────────────────────────── */
+  .eccc-red      { --ac: #cc0000; }
+  .eccc-orange   { --ac: #dd5500; }
+  .eccc-yellow   { --ac: #bb8800; }
+  .eccc-statement{ --ac: #555566; }
+  /* Severe warning background pulse — keyframe injected dynamically per alert color */
+  body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
+
+
+
+  .app { position:relative; z-index:3; max-width:1280px; margin:0 auto; padding:40px 32px 72px; animation:fadeIn 0.5s ease both; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(22px)} to{opacity:1;transform:translateY(0)} }
+
+  /* Header */
+  .header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:28px; gap:20px; }
+  .app-label { display:flex; flex-direction:column; gap:6px; margin-bottom:5px; }
+  .app-label-refresh { font-family:var(--mono); font-size:0.78rem; font-weight:500; letter-spacing:0.2em; text-transform:uppercase; color:var(--text3); display:flex; align-items:center; gap:8px; }
+  .app-label-refresh::before { content:''; display:inline-block; width:7px; height:7px; background:var(--accent); border-radius:50%; box-shadow:0 0 8px var(--accent); animation:pulse 2s ease infinite; transition:background 1.2s ease, box-shadow 1.2s ease; flex-shrink:0; }
+  .logo-svg { height:48px; width:220px; display:block; overflow:visible; }
+  .logo-svg .logo-mark { stroke:var(--accent); fill:none; transition:stroke 1.2s ease; }
+  .logo-svg .logo-text { fill:var(--accent); transition:fill 1.2s ease; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .location-title { font-size:2.6rem; font-weight:300; letter-spacing:-0.01em; line-height:1; }
+  .location-sub { font-family:var(--mono); font-size:0.9rem; color:var(--text3); margin-top:6px; letter-spacing:0.08em; }
+  .header-right { display:flex; flex-direction:column; align-items:flex-end; gap:10px; flex-shrink:0; }
+  .time-display { font-family:var(--mono); font-size:0.9rem; color:var(--text3); letter-spacing:0.06em; }
+  .unit-toggle { display:flex; gap:3px; }
+  .unit-btn {
+    font-family:var(--mono); font-size:0.85rem; padding:6px 12px;
+    background:transparent; border:1px solid var(--border); color:var(--text3);
+    cursor:pointer; transition:all 0.15s; letter-spacing:0.08em;
+  }
+  .unit-btn:first-child { border-radius:var(--radius) 0 0 var(--radius); }
+  .unit-btn:last-child  { border-radius:0 var(--radius) var(--radius) 0; }
+  .unit-btn:only-child  { border-radius:var(--radius); }
+  .unit-btn.active { background:var(--accent-glow); border-color:var(--border-active); color:var(--accent2); }
+  .unit-btn:hover:not(.active) { border-color:var(--border-active); color:var(--text); }
+
+  /* Settings bar */
+  .settings-bar {
+    display: flex; flex-wrap: wrap; gap: 24px;
+    padding: 24px 0 28px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px; margin-bottom: 0;
+  }
+  .settings-bar-section { display: flex; flex-direction: column; gap: 8px; }
+  .settings-bar-label { font-family:var(--sans); font-size:0.72rem; font-weight:600; letter-spacing:0.12em; color:var(--text3); }
+  .settings-bar-group { display: flex; gap: 3px; }
+
+  @media(max-width:480px) {
+    .app { padding: 24px 16px 56px; }
+
+
+    /* Header */
+    .header { flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+    .location-title { font-size: 1.9rem; font-weight:300; }
+    .header-right { flex-direction: row; align-items: center; gap: 12px; width: 100%; justify-content: space-between; }
+    .time-display { font-size: 0.78rem; }
+
+    /* Refresh bar */
+    .refresh-bar { flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+    .refresh-timestamp { font-size: 0.75rem; }
+
+    /* Search */
+    .search-row { gap: 6px; }
+    .search-input { font-size: 0.9rem; padding: 10px 12px; }
+    .search-btn { padding: 10px 14px; font-size: 0.8rem; }
+
+    /* Current conditions — centered column with icon above temp */
+    .current-grid { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 24px; }
+    .wx-icon-lg { display: block; width: 120px; height: 120px; order: -1; margin-bottom: 12px; }
+    .icon-glow-ellipse { width:90px; height:22px; }
+    .temp-big { font-size: 5rem; font-weight:250; font-family:'Google Sans Flex', var(--sans); font-variation-settings:'wdth' 125; font-feature-settings:'tnum'; }
+    .condition-text { font-size: 1.1rem; }
+
+    /* Stats */
+    .stats-row { grid-template-columns: repeat(2,1fr); gap: 8px; margin-bottom: 24px; }
+    .stat-card { padding: 14px; }
+    .stat-value { font-size: 1.6rem; font-weight:300; }
+
+    /* Hourly */
+    .hour-card { width: 74px; padding: 10px 6px; }
+    .hour-temp { font-size: 0.95rem; }
+
+    /* Forecast */
+    .forecast-row { grid-template-columns: 90px 34px 1fr auto; gap: 10px; padding: 10px 12px; }
+    .forecast-day { font-size: 0.95rem; }
+    .forecast-high { font-size: 1rem; }
+    .forecast-pop { display: none; }
+
+    /* Detail cards */
+    .info-grid { grid-template-columns: repeat(2,1fr); gap: 8px; }
+    .info-card { padding: 16px; }
+    .info-card-value { font-size: 1.7rem; font-weight:300; }
+
+    /* Sun card */
+    .sun-card { flex-direction: column; gap: 16px; padding: 16px; }
+    .sun-times { flex-direction: row; justify-content: space-around; width: 100%; }
+
+    /* Alerts */
+    .alert-banner-row { padding: 10px 14px; font-size: 0.8rem; gap: 10px; }
+
+    /* Settings bar */
+    .settings-bar { gap: 16px; }
+    .settings-bar-group { flex-wrap: wrap; }
+
+    /* Footer */
+    .footer { flex-direction: column; gap: 8px; text-align: center; }
+  }
+
+  /* Refresh bar */
+  .refresh-bar { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; gap:16px; }
+  .refresh-left { display:flex; align-items:center; gap:12px; flex:1; }
+  .refresh-line { flex:1; height:1px; background:var(--border); position:relative; }
+  .refresh-line::before { content:''; position:absolute; left:0; top:0; height:1px; width:100px; background:linear-gradient(to right,var(--accent),transparent); transition:background 1.2s ease; }
+  .refresh-timestamp { font-family:var(--mono); font-size:0.85rem; color:var(--text3); letter-spacing:0.06em; white-space:nowrap; }
+  .ts-value { color:var(--accent2); transition:color 1.2s ease; }
+  .refresh-btn { font-family:var(--mono); font-size:0.85rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--text3); background:transparent; border:1px solid var(--border); padding:6px 14px; cursor:pointer; border-radius:var(--radius); transition:color 0.15s, border-color 0.15s; white-space:nowrap; display:flex; align-items:center; gap:6px; }
+  .refresh-btn:hover { border-color:var(--border-active); color:var(--accent2); }
+  .refresh-btn.spinning .ri { animation:spin 0.8s linear infinite; }
+  .ri { display:inline-block; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  /* Search */
+  .search-row { display:flex; gap:10px; margin-bottom:28px; }
+  .search-input { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-family:var(--sans); font-size:1rem; padding:12px 16px; outline:none; transition:border-color 0.15s; }
+  .search-input:focus { border-color:var(--border-active); }
+  .search-input::placeholder { color:var(--text3); }
+  .search-btn { background:var(--accent-glow); border:1px solid var(--border-active); border-radius:var(--radius); color:var(--accent2); font-family:var(--sans); font-size:0.9rem; font-weight:600; padding:12px 24px; cursor:pointer; letter-spacing:0.04em; text-transform:uppercase; transition:all 0.15s; }
+  .search-btn:hover { background:rgba(var(--a0),0.25); }
+  .search-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .gps-btn { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); color:var(--text3); padding:12px 14px; cursor:pointer; transition:all 0.15s; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .gps-btn:hover { border-color:var(--border-active); color:var(--accent2); background:var(--accent-glow); }
+  .gps-btn.locating { color:var(--accent2); border-color:var(--border-active); }
+  .gps-btn.locating svg { animation:spin 1s linear infinite; }
+
+  /* Error / geo notice */
+  .error-box { background:rgba(255,107,107,0.08); border:1px solid rgba(255,107,107,0.3); padding:12px 18px; margin-bottom:16px; font-family:var(--mono); font-size:0.9rem; color:var(--danger); letter-spacing:0.01em; }
+  .geo-notice { background:var(--accent-glow2); border:1px solid var(--border-active); padding:12px 18px; margin-bottom:16px; font-family:var(--mono); font-size:0.9rem; color:var(--accent2); letter-spacing:0.05em; display:flex; align-items:center; gap:10px; }
+
+  /* ── Alert banners ── */
+  .alert-list { display:flex; flex-direction:column; gap:8px; margin-bottom:28px; }
+  .alert-banner {
+    display: block;
+    font-family:var(--mono); font-size:0.9rem; letter-spacing:0.04em;
+    border-left:4px solid; border-top:1px solid; border-right:1px solid; border-bottom:1px solid;
+    border-radius:0; cursor:pointer; text-decoration:none; color:inherit;
+    animation:fadeIn 0.3s ease both;
+    transition:filter 0.15s;
+  }
+  .alert-banner-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 20px;
+  }
+  .alert-banner:hover { filter:brightness(1.18); }
+
+  /* Per-product NWS colors via --ac custom property */
+  .alert-tornado-emergency   { --ac:#8a0ba5; }
+  .alert-tornado-warning     { --ac:#ff0550; }
+  .alert-tornado-watch       { --ac:#7302ff; }
+  .alert-svr-pds             { --ac:#ff3300; }
+  .alert-svr-destructive     { --ac:#ff3300; }
+  .alert-tornado-pds         { --ac:#7300ff; }
+  .alert-tornado-observed    { --ac:#bd0065; }
+  .alert-severe-tstorm-warn  { --ac:#ff7905; }
+  .alert-severe-tstorm-watch { --ac:#a14c00; }
+  .alert-hurricane-warning   { --ac:#ff0550; }
+  .alert-hurricane-watch     { --ac:#ff6680; }
+  .alert-hurricane-statement { --ac:#ff9999; }
+  .alert-tropical-storm-warn { --ac:#ff7905; }
+  .alert-tropical-storm-watch{ --ac:#ffaa44; }
+  .alert-tropical-depression { --ac:#ffcc88; }
+  .alert-flash-flood-warn    { --ac:#00d9c0; }
+  .alert-flash-flood-emergency { --ac:#00d9c0; }
+  .alert-flood-warning       { --ac:#00d9c0; }
+  .alert-flash-flood-watch   { --ac:#007060; }
+  .alert-marine-warning      { --ac:#c060a0; }
+  .alert-special-wx-stmt     { --ac:#daadff; }
+  /* Winter alerts */
+  .alert-wind-chill-warn     { --ac:#99ccff; }
+  .alert-wind-chill-watch    { --ac:#7799cc; }
+  .alert-wind-chill-adv      { --ac:#5577aa; }
+  .alert-lake-effect-snow-warn { --ac:#aaddff; }
+  .alert-lake-effect-snow-adv  { --ac:#88bbdd; }
+  .alert-freezing-rain-adv   { --ac:#66aadd; }
+  .alert-sleet-warn          { --ac:#5599cc; }
+  .alert-blizzard            { --ac:#5533cc; }
+  .alert-ice-storm           { --ac:#44aaee; }
+  .alert-snow-squall         { --ac:#c0ddff; }
+  /* Fire / heat / wind */
+  .alert-fire-watch          { --ac:#cc6600; }
+  .alert-extreme-fire        { --ac:#ff4400; }
+  .alert-wind-adv            { --ac:#ddaa55; }
+  .alert-gale-warn           { --ac:#bb8833; }
+  /* Heat / cold */
+  .alert-heat-adv            { --ac:#ff9944; }
+  .alert-excessive-heat-watch{ --ac:#ff6600; }
+  .alert-hard-freeze-warn    { --ac:#aaccff; }
+  .alert-hard-freeze-watch   { --ac:#88aadd; }
+  .alert-freeze-watch        { --ac:#6688bb; }
+  /* Coastal / surge / tsunami */
+  .alert-storm-surge-warn    { --ac:#ff44aa; }
+  .alert-storm-surge-watch   { --ac:#cc3388; }
+  .alert-tsunami-warn        { --ac:#ff00cc; }
+  .alert-tsunami-watch       { --ac:#cc00aa; }
+  .alert-tsunami-adv         { --ac:#990088; }
+  .alert-coastal-flood-warn  { --ac:#00bbdd; }
+  .alert-coastal-flood-watch { --ac:#0099bb; }
+  .alert-coastal-flood-adv   { --ac:#007799; }
+  .alert-lakeshore-flood-warn{ --ac:#00aacc; }
+  .alert-high-surf-warn      { --ac:#0088cc; }
+  .alert-high-surf-adv       { --ac:#0066aa; }
+  .alert-rip-current        { --ac:#0055aa; }
+  /* Visibility */
+  .alert-dense-fog-adv       { --ac:#aaaaaa; }
+  .alert-dense-smoke-adv     { --ac:#888877; }
+  .alert-low-water-adv       { --ac:#886644; }
+  /* Severe follow-up */
+  .alert-severe-wx-stmt      { --ac:#ffcc44; }
+  /* Volcanic / debris / avalanche */
+  .alert-ashfall-warn        { --ac:#aa8855; }
+  .alert-ashfall-adv         { --ac:#997744; }
+  .alert-debris-flow         { --ac:#886633; }
+  .alert-avalanche-warn      { --ac:#ffffff; }
+  .alert-avalanche-watch     { --ac:#dddddd; }
+  .alert-avalanche-adv       { --ac:#bbbbbb; }
+  /* Air quality / hydro */
+  .alert-air-quality         { --ac:#aaaa44; }
+  .alert-hydrological        { --ac:#4488aa; }
+  .alert-volcano             { --ac:#cc4400; }
+  /* Dust */
+  .alert-dust-storm          { --ac:#b08040; }
+  .alert-blowing-dust        { --ac:#c8a87a; }
+  /* Government / civil alerts */
+  .alert-law-enforcement     { --ac:#4a6fa5; }
+  .alert-blue-alert          { --ac:#1a6eff; }
+  .alert-civil-emergency     { --ac:#e75480; }
+  .alert-earthquake          { --ac:#ff2020; }
+  .alert-earthquake-advisory { --ac:#cc6644; }
+  .alert-aftershock          { --ac:#aa5533; }
+  .alert-shelter-in-place    { --ac:#ff2020; }
+  .alert-evacuation          { --ac:#ffffff; }
+  .alert-evacuation-warning  { --ac:#ffe8b0; }
+  .alert-evacuation-watch    { --ac:#ddaa44; }
+  .alert-amber               { --ac:#ffdd00; }
+  .alert-911-outage          { --ac:#7a9ab5; }
+  .alert-nuclear             { --ac:#39ff14; }
+  .alert-ean                 { --ac:#ffffff; }
+  .alert-admin-message       { --ac:#888888; }
+  /* Fallback severity tiers */
+  .alert-extreme  { --ac:#ff0550; }
+  .alert-severe   { --ac:#ff7905; }
+  .alert-moderate { --ac:#ffd040; }
+  .alert-minor    { --ac:#80d0ff; }
+  .alert-unknown  { --ac:#888888; }
+
+  /* All banners consume --ac */
+  .alert-banner {
+    background: color-mix(in srgb, var(--ac,#888) 10%, var(--surface));
+    border-left-color: var(--ac,#888);
+    border-top-color:    color-mix(in srgb, var(--ac,#888) 30%, transparent);
+    border-right-color:  color-mix(in srgb, var(--ac,#888) 30%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--ac,#888) 30%, transparent);
+    color: var(--ac,#888);
+  }
+
+  .alert-icon { display:flex; align-items:center; flex-shrink:0; }
+  .alert-icon svg { width:20px; height:20px; stroke:var(--ac, currentColor); flex-shrink:0; }
+  .alert-body { flex:1; min-width:0; }
+  .alert-title { font-weight:600; margin-bottom:2px; letter-spacing:0.08em; text-transform:uppercase; font-size:0.85rem; }
+  .alert-duration { opacity:0.75; font-size:0.8rem; }
+  .alert-arrow { font-size:0.8rem; opacity:0.5; flex-shrink:0; transition: transform 0.2s ease; }
+  .alert-banner.expanded .alert-arrow { transform: rotate(90deg); }
+
+  .alert-text {
+    display: none;
+    padding: 12px 20px 16px 56px;
+    font-family: var(--mono); font-size: 0.82rem; line-height: 1.65;
+    color: var(--ac, #888); opacity: 0.9;
+    border-top: 1px solid color-mix(in srgb, var(--ac,#888) 20%, transparent);
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .alert-banner.expanded .alert-text { display: block; }
+  .alert-nws-link {
+    display: inline-block; margin-top: 10px;
+    font-size: 0.75rem; letter-spacing: 0.1em; opacity: 0.6;
+    color: var(--ac, #888); text-decoration: none;
+    transition: opacity 0.15s;
+  }
+  .alert-nws-link:hover { opacity: 1; }
+
+  /* Loading */
+  .loading-overlay { text-align:center; padding:80px 0; }
+  .loading-spinner { width:40px; height:40px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto 16px; }
+  .loading-text { font-family:var(--mono); font-size:0.9rem; color:var(--text3); letter-spacing:0.15em; text-transform:uppercase; }
+
+  /* Current */
+  .current-grid { display:grid; grid-template-columns:1fr auto; gap:32px; margin-bottom:36px; align-items:center; padding:28px 0; }
+  .condition-label { font-family:var(--mono); font-size:0.85rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--text3); margin-bottom:8px; }
+  .temp-big { font-size:6.4rem; font-weight:250; letter-spacing:-0.01em; line-height:1; font-family:'Google Sans Flex', var(--sans); font-variation-settings:'wdth' 125; font-feature-settings:'tnum'; }
+  .temp-big .unit { font-size:2.9rem; font-weight:300; color:var(--text2); vertical-align:super; margin-left:4px; }
+  .condition-text { font-size:1.3rem; font-weight:300; color:var(--text2); margin-top:6px; }
+  .feels-like { font-family:var(--mono); font-size:0.9rem; color:var(--text3); margin-top:4px; }
+  .wx-icon-lg { width:150px; height:150px; animation:floatIcon 4s ease-in-out infinite; filter:drop-shadow(0 0 18px rgba(var(--a0),0.25)); transition:filter 1.2s ease; position:relative; z-index:1; }
+  .icon-glow-wrap { position:relative; display:inline-flex; align-items:center; justify-content:center; }
+  .icon-glow-ellipse { position:absolute; bottom:-10px; left:50%; transform:translateX(-50%); width:120px; height:28px; background:rgba(var(--a0),0.22); filter:blur(14px); border-radius:50%; z-index:0; transition:background 1.2s ease, filter 1.2s ease; }
+  .wx-icon-md { width:36px; height:36px; }
+  .wx-icon-sm { width:40px; height:40px; }
+  @keyframes floatIcon { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+  @keyframes asteroidShake {
+    0%,100% { transform:translate(0,0) rotate(0deg); }
+    10% { transform:translate(-4px,3px) rotate(-0.3deg); }
+    20% { transform:translate(6px,-4px) rotate(0.5deg); }
+    30% { transform:translate(-8px,5px) rotate(-0.7deg); }
+    40% { transform:translate(7px,-6px) rotate(0.4deg); }
+    50% { transform:translate(-6px,4px) rotate(-0.6deg); }
+    60% { transform:translate(9px,-3px) rotate(0.8deg); }
+    70% { transform:translate(-7px,6px) rotate(-0.4deg); }
+    80% { transform:translate(5px,-4px) rotate(0.5deg); }
+    90% { transform:translate(-3px,2px) rotate(-0.2deg); }
+  }
+  @keyframes explode {
+    0%   { transform:scale(1) rotate(0deg); opacity:1; filter:brightness(1); }
+    30%  { transform:scale(1.05) rotate(-1deg); filter:brightness(3) saturate(0); }
+    60%  { transform:scale(1.15) rotate(2deg); filter:brightness(8) saturate(0); opacity:0.8; }
+    80%  { transform:scale(2) rotate(-3deg); filter:brightness(20) saturate(0); opacity:0.4; }
+    100% { transform:scale(4) rotate(5deg); filter:brightness(50) saturate(0); opacity:0; }
+  }
+  .asteroid-shaking { animation: asteroidShake 0.4s ease-in-out infinite; }
+  .exploding { animation: explode 1.2s ease-in forwards; pointer-events:none; }
+  .alert-asteroid { --ac:#ff4400; }
+  #asteroidCountdown {
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    font-family:var(--mono); font-size:1.1rem; letter-spacing:0.2em;
+    color:#ff4400; text-shadow:0 0 12px #ff4400; z-index:9999;
+    display:none;
+  }
+    10%     { transform:translate(-6px,3px) rotate(-0.5deg); }
+    20%     { transform:translate(8px,-4px) rotate(0.8deg); }
+    30%     { transform:translate(-10px,5px) rotate(-1deg); }
+    40%     { transform:translate(9px,-6px) rotate(0.6deg); }
+    50%     { transform:translate(-7px,4px) rotate(-0.8deg); }
+    60%     { transform:translate(10px,-3px) rotate(1deg); }
+    70%     { transform:translate(-8px,6px) rotate(-0.5deg); }
+    80%     { transform:translate(6px,-4px) rotate(0.7deg); }
+    90%     { transform:translate(-4px,2px) rotate(-0.3deg); }
+  }
+
+  /* Stats */
+  .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:48px; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px; position:relative; overflow:hidden; transition:border-color 0.2s; }
+  .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(to right,var(--accent),transparent); opacity:0; transition:opacity 0.2s, background 1.2s ease; }
+  .stat-card:hover { border-color:var(--border-active); }
+  .stat-card:hover::before { opacity:1; }
+  .stat-label { font-family:var(--mono); font-size:0.75rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--text3); margin-bottom:6px; }
+  .stat-value { font-size:1.75rem; font-weight:300; letter-spacing:-0.02em; }
+  .stat-unit { font-family:var(--mono); font-size:0.85rem; color:var(--text3); margin-left:3px; }
+  .stat-icon { position:absolute; bottom:10px; right:10px; opacity:0.5; }
+  .stat-icon .ph { font-size:28px; line-height:1; color:var(--accent2); transition:color 1.2s ease; }
+
+  /* Section headers */
+  .section-header { display:flex; align-items:center; gap:14px; margin-bottom:14px; }
+  .section-title { font-family:var(--mono); font-size:0.85rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--text3); white-space:nowrap; }
+  .section-line { flex:1; height:1px; background:var(--border); }
+
+  /* Hourly */
+  .hourly-scroll { display:flex; gap:12px; overflow-x:auto; padding-bottom:10px; margin-bottom:36px; scrollbar-width:thin; scrollbar-color:var(--surface3) transparent; }
+  .hourly-scroll::-webkit-scrollbar { height:3px; }
+  .hourly-scroll::-webkit-scrollbar-thumb { background:var(--surface3); border-radius:2px; }
+  .hour-card { flex-shrink:0; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 10px; text-align:center; width:90px; transition:border-color 0.15s, transform 0.15s; position:relative; overflow:hidden; }
+  .hour-card.now { border-color:var(--border-active); background:var(--accent-glow2); }
+  .hour-card.now::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--accent); transition:background 1.2s ease; }
+  .hour-card:hover { border-color:var(--border-active); transform:translateY(-2px); }
+  .hour-time { font-family:var(--mono); font-size:0.75rem; color:var(--text3); letter-spacing:0.06em; margin-bottom:8px; }
+  .hour-card.now .hour-time { color:var(--accent2); }
+  .hour-icon { margin-bottom:8px; display:flex; justify-content:center; }
+  .hour-icon-glyph { font-size:26px; line-height:1; color:var(--text2); }
+  .hour-card.now .hour-icon-glyph { color:var(--accent2); }
+  .hour-temp { font-size:1.05rem; font-weight:600; }
+  .hour-pop { font-family:var(--mono); font-size:0.75rem; color:#64aaff; margin-top:4px; }
+
+  /* Forecast */
+  .forecast-list { display:flex; flex-direction:column; gap:5px; margin-bottom:36px; }
+  .forecast-row { display:grid; grid-template-columns:120px 40px 1fr auto auto; align-items:center; gap:16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px 18px; transition:border-color 0.15s; position:relative; overflow:hidden; }
+  .forecast-row:hover { border-color:var(--border-active); }
+  .forecast-row.today { border-color:rgba(var(--a0),0.2); }
+  .forecast-day { font-size:1.05rem; font-weight:600; }
+  .forecast-row.today .forecast-day { color:var(--accent2); }
+  .forecast-icon { display:flex; justify-content:center; }
+  .forecast-icon-glyph { font-size:22px; line-height:1; color:var(--text2); }
+  .forecast-row.today .forecast-icon-glyph { color:var(--accent2); }
+  .temp-bar-bg { height:3px; background:var(--surface3); border-radius:2px; overflow:hidden; }
+  .temp-bar-fill { height:100%; background:linear-gradient(to right,var(--accent),#ff8844); border-radius:2px; transition:width 0.8s cubic-bezier(0.23,1,0.32,1), background 1.2s ease; }
+  .temp-bar-labels { display:flex; justify-content:space-between; margin-top:3px; font-family:var(--mono); font-size:0.75rem; color:var(--text3); }
+  .forecast-high { font-size:1.2rem; font-weight:300; text-align:right; white-space:nowrap; }
+  .forecast-pop  { font-family:var(--mono); font-size:0.85rem; color:#64aaff; text-align:right; white-space:nowrap; min-width:32px; }
+
+  /* Detail */
+  .info-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:48px; }
+  .info-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px; transition:border-color 0.2s; position:relative; overflow:hidden; }
+  .info-card:hover { border-color:var(--border-active); }
+  .info-card-label { font-family:var(--mono); font-size:0.75rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--text3); margin-bottom:12px; }
+  .info-card-value { font-size:2.2rem; font-weight:300; letter-spacing:-0.03em; }
+  .info-card-desc { font-size:1rem; color:var(--text3); margin-top:4px; }
+  .uv-bar { height:4px; border-radius:2px; background:linear-gradient(to right,#64ff8a,#ffcc44,#ff6b44,#ff44aa); margin-top:18px; position:relative; }
+  .uv-marker { position:absolute; top:-4px; width:12px; height:12px; background:white; border-radius:50%; transform:translateX(-50%); box-shadow:0 0 6px rgba(255,255,255,0.5); }
+
+  /* Sun */
+  .sun-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 28px; margin-bottom:36px; display:flex; align-items:center; gap:32px; position:relative; overflow:hidden; }
+  .sun-arc-wrap { flex:1; }
+  .sun-arc-svg { width:100%; max-width:340px; }
+  .sun-times { display:flex; flex-direction:column; gap:16px; flex-shrink:0; }
+  .sun-time-item { display:flex; flex-direction:column; gap:4px; }
+  .sun-time-label { font-family:var(--mono); font-size:0.75rem; letter-spacing:0.15em; text-transform:uppercase; color:var(--text3); }
+  .sun-time-val { font-size:1.45rem; font-weight:300; }
+  .sun-daylight { font-family:var(--mono); font-size:0.85rem; color:var(--accent2); transition:color 1.2s ease; }
+
+  /* Footer */
+
+  .footer-brand { font-family:var(--mono); font-size:0.85rem; color:var(--text3); letter-spacing:0.12em; }
+  .footer-brand span { color:var(--accent); transition:color 1.2s ease; }
+  .footer-credit { font-family:var(--mono); font-size:0.75rem; color:var(--text3); letter-spacing:0.08em; }
+  .footer-credit a { color:var(--text3); text-decoration:none; transition:color 0.15s; }
+  .footer-credit a:hover { color:var(--accent2); }
+  .demo-panel { border-top:1px solid var(--border); margin-top:24px; padding:20px 0 8px; }
+  .demo-label { font-family:var(--mono); font-size:0.72rem; letter-spacing:0.2em; color:var(--text3); margin-bottom:10px; }
+  .demo-row { display:flex; gap:8px; align-items:stretch; flex-wrap:wrap; }
+  .demo-select { flex:1; min-width:200px; background:var(--surface); border:1px solid var(--border); color:var(--text2); font-family:var(--mono); font-size:0.82rem; padding:10px 12px; cursor:pointer; outline:none; transition:border-color 0.15s; letter-spacing:0.04em; }
+  .demo-select:focus { border-color:var(--border-active); }
+  .demo-btn { background:var(--accent-glow); border:1px solid var(--border-active); color:var(--accent2); font-family:var(--mono); font-size:0.8rem; padding:10px 18px; cursor:pointer; letter-spacing:0.06em; text-transform:uppercase; transition:all 0.15s; white-space:nowrap; }
+  .demo-btn:hover { background:rgba(var(--a0),0.25); }
+  .demo-btn-clear { background:transparent; border-color:var(--border); color:var(--text3); }
+  .demo-btn-clear:hover { border-color:var(--border-active); color:var(--text2); background:transparent; }
+
+  @media(max-width:760px) {
+    .stats-row { grid-template-columns:repeat(2,1fr); }
+    .info-grid  { grid-template-columns:repeat(2,1fr); }
+    .current-grid { display:flex; flex-direction:column; align-items:center; text-align:center; margin-bottom:24px; }
+    .wx-icon-lg { display:block; width:120px; height:120px; order:-1; margin-bottom:12px; }
+    .icon-glow-wrap { order:-1; margin-bottom:12px; }
+    .icon-glow-ellipse { width:90px; height:22px; }
+    .temp-big { font-size:60px; font-family:'Google Sans Flex', var(--sans); font-variation-settings:'wdth' 125; font-feature-settings:'tnum'; }
+    .forecast-row { grid-template-columns:110px 38px 1fr auto; }
+    .forecast-pop { display:none; }
+    .sun-card { flex-direction:column; }
+  }
+
+  /* ── Condensed scroll header ─────────────────────────────────────────── */
+  .condensed-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 9998;
+    display: flex;
+    justify-content: center;
+    padding: 16px 32px;
+    background: rgba(var(--surface-rgb), 0.68);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    border-bottom: 1px solid var(--border);
+    transform: translateY(-100%);
+    opacity: 0;
+    transition: transform 0.4s cubic-bezier(0.23,1,0.32,1), opacity 0.3s ease,
+                background 1.2s ease, border-color 1.2s ease;
+    pointer-events: none;
+  }
+  .condensed-bar.visible {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .condensed-bar-inner {
+    display: flex; align-items: center; gap: 14px;
+    max-width: 1280px; width: 100%;
+  }
+  .condensed-icon-gw { width: 28px; height: 28px; flex-shrink: 0; display: block; }
+  .condensed-icon-gw svg, .condensed-icon-gw img { width: 100%; height: 100%; }
+  .condensed-location { font-family: var(--sans); font-weight: 600; font-size: 0.95rem; color: var(--text); margin-right: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .condensed-temp { font-family: 'Google Sans Flex', var(--sans); font-size: 1.2rem; font-weight: 500; font-variation-settings:'wdth' 125; font-feature-settings:'tnum'; white-space: nowrap; }
+  .condensed-temp .unit { color: var(--text2); font-weight: 400; margin-left: 2px; }
+  .condensed-cond { font-family: var(--mono); font-size: 0.82rem; color: var(--text2); letter-spacing: 0.04em; white-space: nowrap; }
+  @media(max-width:600px) {
+    .condensed-bar { padding: 14px 16px; }
+    .condensed-cond { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="top-glow"></div>
+<div class="condensed-bar" id="condensedBar">
+  <div class="condensed-bar-inner">
+    <div class="condensed-icon-gw" id="condensedIconGw"></div>
+    <span class="condensed-location" id="condensedLocation">—</span>
+    <span class="condensed-temp"><span id="condensedTemp">—</span><span class="unit" id="condensedUnit">°F</span></span>
+    <span class="condensed-cond" id="condensedCond">—</span>
+  </div>
+</div>
+<div class="app">
+
+  <div class="header">
+    <div>
+      <div class="app-label">
+        <svg class="logo-svg" viewBox="-8 44 903 197" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path class="logo-mark" d="M221.348 93.6234C214.473 79.8367 202.884 68.9757 188.688 63.0138C174.492 57.0518 158.63 56.3843 143.984 61.1327C129.338 65.881 116.88 75.7301 108.872 88.8906C102.358 85.0172 94.9345 82.9389 87.3573 82.8667C79.7801 82.7945 72.3188 84.7311 65.7316 88.4796C59.1443 92.2281 53.6658 97.655 49.8526 104.209C46.0394 110.763 44.0276 118.21 44.0213 125.794C44.0416 128.109 44.2466 130.418 44.6346 132.699C33.3347 134.79 23.226 141.038 16.2983 150.214C9.37056 159.39 6.1257 170.829 7.20247 182.28C8.27923 193.73 13.5996 204.363 22.1163 212.084C30.633 219.805 41.729 224.056 53.2201 223.999" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+          <path class="logo-text" d="M118.55 232.2C111.15 232.2 104.45 231.1 98.45 228.9C92.55 226.6 87.5 223.3 83.3 219C80.3767 215.934 77.9363 212.334 75.9789 208.201C74.59 205.268 76.0177 201.866 78.9202 200.415C82.5303 198.61 86.8362 200.558 88.6557 204.161C89.9815 206.786 91.5462 209.082 93.35 211.05C96.65 214.55 100.55 217.1 105.05 218.7C109.55 220.2 114.4 220.95 119.6 220.95C124.5 220.95 128.6 220.15 131.9 218.55C135.2 216.85 137.65 214.7 139.25 212.1C140.95 209.4 141.8 206.55 141.8 203.55C141.8 199.85 140.6 196.95 138.2 194.85C135.9 192.75 132.5 191.05 128 189.75L111.95 185.25C106.85 183.75 102.5 181.8 98.9 179.4C95.4 177 92.7 174.15 90.8 170.85C89 167.55 88.1 163.95 88.1 160.05C88.1 154.55 89.55 149.55 92.45 145.05C95.45 140.55 99.6 137 104.9 134.4C110.3 131.7 116.65 130.35 123.95 130.35C133.65 130.35 141.75 132.35 148.25 136.35C153.311 139.464 157.25 143.851 160.068 149.511C161.485 152.359 160.055 155.696 157.196 157.09C153.592 158.846 149.388 156.755 147.472 153.233C146.494 151.434 145.353 149.907 144.05 148.65C141.25 145.95 138.05 144.1 134.45 143.1C130.85 142.1 127.1 141.6 123.2 141.6C118.2 141.6 114 142.35 110.6 143.85C107.2 145.35 104.65 147.35 102.95 149.85C101.35 152.35 100.55 155.1 100.55 158.1C100.55 161.5 101.85 164.6 104.45 167.4C107.05 170.1 110.55 172.1 114.95 173.4L132.8 178.5C140.1 180.6 145.5 183.6 149 187.5C152.5 191.3 154.25 196 154.25 201.6C154.25 207.8 152.6 213.2 149.3 217.8C146.1 222.4 141.8 225.95 136.4 228.45C131 230.95 125.05 232.2 118.55 232.2Z"/>
+          <path class="logo-text" d="M195.768 141.6C193.368 141.6 191.418 140.9 189.918 139.5C188.418 138 187.668 136.1 187.668 133.8C187.668 130.7 188.568 128.25 190.368 126.45C192.268 124.55 194.518 123.6 197.118 123.6C199.518 123.6 201.468 124.35 202.968 125.85C204.468 127.25 205.218 129.1 205.218 131.4C205.218 134.5 204.268 137 202.368 138.9C200.568 140.7 198.368 141.6 195.768 141.6ZM189.762 156C193.524 156 196.306 159.502 195.456 163.166L180.768 226.476C180.153 229.125 177.793 231 175.074 231C171.313 231 168.531 227.499 169.381 223.834L184.069 160.524C184.683 157.875 187.043 156 189.762 156Z"/>
+          <path class="logo-text" d="M226.94 232.05C220.04 232.05 215.24 230 212.54 225.9C209.84 221.7 209.29 216.25 210.89 209.55L230.242 126.024C230.856 123.376 233.215 121.5 235.935 121.5C239.696 121.5 242.477 125.001 241.626 128.665L222.74 210C221.74 214.1 222.04 217.05 223.64 218.85C225.24 220.65 227.99 221.55 231.89 221.55C233.39 221.55 234.69 221.5 235.79 221.4C237.218 221.27 238.418 222.62 237.991 223.989L236.614 228.393C236.189 229.754 235.168 230.872 233.795 231.26C233.018 231.48 232.283 231.643 231.59 231.75C230.29 231.95 228.74 232.05 226.94 232.05Z"/>
+          <path class="logo-text" d="M310.978 158.723C311.998 157.033 313.827 156 315.801 156C320.226 156 322.923 160.869 320.574 164.62L281.58 226.911C279.988 229.455 277.198 231 274.197 231C269.962 231 266.341 227.954 265.615 223.782L255.003 162.796C254.386 159.248 257.117 156 260.719 156C263.571 156 266.001 158.073 266.449 160.89L275.929 220.481C276.046 221.217 275.394 221.845 274.663 221.698C273.936 221.553 273.574 220.731 273.957 220.097L310.978 158.723Z"/>
+          <path class="logo-text" d="M362.525 232.35C355.625 232.35 349.675 230.85 344.675 227.85C339.775 224.85 336.025 220.8 333.425 215.7C330.825 210.6 329.525 204.9 329.525 198.6C329.525 190.8 331.075 183.55 334.175 176.85C337.275 170.15 341.775 164.8 347.675 160.8C353.675 156.7 360.925 154.65 369.425 154.65C375.525 154.65 380.725 155.9 385.025 158.4C389.425 160.9 392.775 164.35 395.075 168.75C397.375 173.05 398.525 177.95 398.525 183.45C398.525 185.45 398.325 187.55 397.925 189.75C397.356 193.734 393.675 196.35 389.65 196.35H340.625C337.725 196.35 335.375 193.999 335.375 191.1C335.375 188.201 337.725 185.85 340.625 185.85H387.878C388.971 185.85 389.454 187.227 388.6 187.91C387.736 188.601 386.402 187.779 386.505 186.676C386.512 186.601 386.519 186.525 386.525 186.45C386.725 185.25 386.825 184.1 386.825 183C386.825 179.4 386.075 176.25 384.575 173.55C383.175 170.85 381.125 168.75 378.425 167.25C375.725 165.75 372.475 165 368.675 165C363.775 165 359.575 166 356.075 168C352.675 169.9 349.875 172.5 347.675 175.8C345.575 179.1 344.025 182.8 343.025 186.9C342.125 190.9 341.675 194.95 341.675 199.05C341.675 203.55 342.575 207.55 344.375 211.05C346.275 214.45 348.875 217.15 352.175 219.15C355.475 221.05 359.375 222 363.875 222C368.975 221.9 373.175 220.8 376.475 218.7C378.161 217.627 379.691 216.384 381.063 214.972C383.249 212.724 386.739 211.893 389.348 213.632C391.92 215.347 392.619 218.87 390.505 221.125C389.148 222.573 387.671 223.914 386.075 225.15C382.975 227.45 379.425 229.25 375.425 230.55C371.525 231.75 367.225 232.35 362.525 232.35Z"/>
+          <path class="logo-text" d="M418.972 231C415.21 231 412.427 227.498 413.278 223.833L428.091 159.983C428.632 157.651 430.71 156 433.103 156C436.139 156 438.515 158.614 438.226 161.636L437.241 171.926C437.182 172.544 436.502 172.893 435.966 172.58C435.595 172.363 435.442 171.902 435.622 171.511C437.193 168.108 439.29 165.187 441.915 162.75C444.715 160.05 447.865 158 451.365 156.6C454.965 155.2 458.515 154.5 462.015 154.5C463.615 154.5 465.015 154.6 466.215 154.8C468.276 155.117 469.203 157.314 468.574 159.303L467.155 163.797C466.583 165.609 464.493 166.489 462.615 166.2C461.415 165.9 459.965 165.75 458.265 165.75C454.465 165.75 450.865 166.65 447.465 168.45C444.165 170.15 441.265 172.8 438.765 176.4C436.265 180 434.365 184.65 433.065 190.35L424.666 226.478C424.05 229.126 421.691 231 418.972 231Z"/>
+          <path class="logo-text" d="M562.544 232.2C555.144 232.2 548.444 231.1 542.444 228.9C536.544 226.6 531.494 223.3 527.294 219C524.371 215.934 521.93 212.334 519.973 208.201C518.584 205.268 520.012 201.866 522.914 200.415C526.524 198.61 530.83 200.558 532.65 204.161C533.976 206.786 535.54 209.082 537.344 211.05C540.644 214.55 544.544 217.1 549.044 218.7C553.544 220.2 558.394 220.95 563.594 220.95C568.494 220.95 572.594 220.15 575.894 218.55C579.194 216.85 581.644 214.7 583.244 212.1C584.944 209.4 585.794 206.55 585.794 203.55C585.794 199.85 584.594 196.95 582.194 194.85C579.894 192.75 576.494 191.05 571.994 189.75L555.944 185.25C550.844 183.75 546.494 181.8 542.894 179.4C539.394 177 536.694 174.15 534.794 170.85C532.994 167.55 532.094 163.95 532.094 160.05C532.094 154.55 533.544 149.55 536.444 145.05C539.444 140.55 543.594 137 548.894 134.4C554.294 131.7 560.644 130.35 567.944 130.35C577.644 130.35 585.744 132.35 592.244 136.35C597.305 139.464 601.244 143.851 604.062 149.511C605.479 152.359 604.049 155.696 601.19 157.09C597.586 158.846 593.382 156.755 591.466 153.233C590.488 151.434 589.347 149.907 588.044 148.65C585.244 145.95 582.044 144.1 578.444 143.1C574.844 142.1 571.094 141.6 567.194 141.6C562.194 141.6 557.994 142.35 554.594 143.85C551.194 145.35 548.644 147.35 546.944 149.85C545.344 152.35 544.544 155.1 544.544 158.1C544.544 161.5 545.844 164.6 548.444 167.4C551.044 170.1 554.544 172.1 558.944 173.4L576.794 178.5C584.094 180.6 589.494 183.6 592.994 187.5C596.494 191.3 598.244 196 598.244 201.6C598.244 207.8 596.594 213.2 593.294 217.8C590.094 222.4 585.794 225.95 580.394 228.45C574.994 230.95 569.044 232.2 562.544 232.2Z"/>
+          <path class="logo-text" d="M678.141 156C683.165 156 685.436 162.284 681.573 165.496L653.845 188.55L651.295 190.2L632.556 205.848C628.925 208.88 623.471 205.825 624.159 201.145C624.343 199.892 624.982 198.752 625.954 197.94L674.701 157.247C675.666 156.441 676.884 156 678.141 156ZM642.442 121.5C646.202 121.5 648.985 125 648.136 128.664L625.493 226.473C624.879 229.123 622.519 231 619.798 231C616.037 231 613.255 227.5 614.103 223.836L636.747 126.027C637.36 123.377 639.721 121.5 642.442 121.5ZM650.36 186.044C653.354 184.063 657.411 185.261 658.848 188.551L673.748 222.653C675.468 226.591 672.583 231 668.286 231C665.896 231 663.737 229.572 662.802 227.373L648.23 193.13C647.138 190.563 648.034 187.583 650.36 186.044Z"/>
+          <path class="logo-text" d="M722.233 141.6C719.833 141.6 717.883 140.9 716.383 139.5C714.883 138 714.133 136.1 714.133 133.8C714.133 130.7 715.033 128.25 716.833 126.45C718.733 124.55 720.983 123.6 723.583 123.6C725.983 123.6 727.933 124.35 729.433 125.85C730.933 127.25 731.683 129.1 731.683 131.4C731.683 134.5 730.733 137 728.833 138.9C727.033 140.7 724.833 141.6 722.233 141.6ZM716.227 156C719.989 156 722.771 159.502 721.921 163.166L707.233 226.476C706.618 229.125 704.258 231 701.539 231C697.778 231 694.996 227.498 695.846 223.834L710.534 160.524C711.148 157.875 713.508 156 716.227 156Z"/>
+          <path class="logo-text" d="M769.605 232.35C762.705 232.35 756.755 230.85 751.755 227.85C746.855 224.85 743.105 220.8 740.505 215.7C737.905 210.6 736.605 204.9 736.605 198.6C736.605 190.8 738.155 183.55 741.255 176.85C744.355 170.15 748.855 164.8 754.755 160.8C760.755 156.7 768.005 154.65 776.505 154.65C782.605 154.65 787.805 155.9 792.105 158.4C796.505 160.9 799.855 164.35 802.155 168.75C804.455 173.05 805.605 177.95 805.605 183.45C805.605 185.45 805.405 187.55 805.005 189.75C804.436 193.734 800.755 196.35 796.73 196.35H747.705C744.806 196.35 742.455 193.999 742.455 191.1C742.455 188.201 744.806 185.85 747.705 185.85H794.958C796.051 185.85 796.534 187.227 795.681 187.91C794.816 188.601 793.482 187.779 793.585 186.676C793.592 186.601 793.599 186.525 793.605 186.45C793.805 185.25 793.905 184.1 793.905 183C793.905 179.4 793.155 176.25 791.655 173.55C790.255 170.85 788.205 168.75 785.505 167.25C782.805 165.75 779.555 165 775.755 165C770.855 165 766.655 166 763.155 168C759.755 169.9 756.955 172.5 754.755 175.8C752.655 179.1 751.105 182.8 750.105 186.9C749.205 190.9 748.755 194.95 748.755 199.05C748.755 203.55 749.655 207.55 751.455 211.05C753.355 214.45 755.955 217.15 759.255 219.15C762.555 221.05 766.455 222 770.955 222C776.055 221.9 780.255 220.8 783.555 218.7C785.241 217.627 786.771 216.384 788.143 214.972C790.329 212.724 793.819 211.893 796.428 213.632C799 215.347 799.699 218.87 797.585 221.125C796.228 222.573 794.751 223.914 793.155 225.15C790.055 227.45 786.505 229.25 782.505 230.55C778.605 231.75 774.305 232.35 769.605 232.35Z"/>
+          <path class="logo-text" d="M851.845 232.65C846.045 232.65 840.795 231.75 836.095 229.95C831.495 228.15 827.545 225.6 824.245 222.3C822.364 220.361 820.743 218.214 819.38 215.861C817.746 213.038 819.246 209.579 822.238 208.28C825.505 206.862 829.21 208.593 831.089 211.619C832.731 214.263 834.75 216.424 837.145 218.1C841.145 220.8 846.245 222.15 852.445 222.15C857.745 222.15 861.745 221 864.445 218.7C867.245 216.3 868.645 213.4 868.645 210C868.645 207.4 867.895 205.35 866.395 203.85C864.895 202.35 862.545 201.15 859.345 200.25L845.995 196.5C839.795 194.8 835.145 192.25 832.045 188.85C828.945 185.35 827.395 181.35 827.395 176.85C827.395 172.65 828.545 168.9 830.845 165.6C833.145 162.2 836.445 159.5 840.745 157.5C845.045 155.5 850.145 154.5 856.045 154.5C863.145 154.5 869.395 156.1 874.795 159.3C878.658 161.589 881.728 164.621 884.005 168.395C885.582 171.009 884.231 174.263 881.478 175.583C878.261 177.126 874.486 175.361 872.281 172.556C871.939 172.121 871.577 171.702 871.195 171.3C869.295 169.2 866.995 167.6 864.295 166.5C861.695 165.4 858.695 164.85 855.295 164.85C849.795 164.85 845.695 165.85 842.995 167.85C840.395 169.85 839.095 172.5 839.095 175.8C839.095 178.6 840.045 180.85 841.945 182.55C843.945 184.15 846.395 185.35 849.295 186.15L863.995 190.35C869.095 191.75 873.095 194.05 875.995 197.25C878.995 200.45 880.495 204.15 880.495 208.35C880.495 213.35 879.245 217.7 876.745 221.4C874.245 225 870.845 227.8 866.545 229.8C862.245 231.7 857.345 232.65 851.845 232.65Z"/>
+        </svg>
+        <span class="app-label-refresh">Last Refresh <span id="lastRefresh" style="color:var(--accent2)">—</span></span>
+      </div>
+      <div class="location-title" id="locationTitle">—</div>
+      <div class="location-sub" id="locationSub">Locating…</div>
+    </div>
+    <div class="header-right">
+      <div class="time-display" id="clockDisplay">—</div>
+      <div class="unit-toggle">
+        <button class="unit-btn active" id="btnF" onclick="setUnit('F')">°F</button>
+        <button class="unit-btn"        id="btnC" onclick="setUnit('C')">°C</button>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="refresh-bar">
+    <div class="refresh-left">
+      <div class="refresh-line"></div>
+    </div>
+    <button class="refresh-btn" id="refreshBtn" onclick="loadWeather()">
+      <span class="ri">↻</span> REFRESH
+    </button>
+  </div>
+
+  <div class="search-row">
+    <input class="search-input" type="text" id="searchInput" placeholder="Search city… (e.g. Tucson, AZ)" />
+    <button class="search-btn" id="searchBtn" onclick="handleSearch()">SEARCH</button>
+    <button class="gps-btn" id="gpsBtn" onclick="initGeolocation(true)" title="Use my GPS location">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(45deg)">
+        <path d="M12 2L4 20l8-4 8 4L12 2z"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="geo-notice" id="geoNotice" style="display:none;">📍 Using your browser location. Search above to change.</div>
+  <div class="error-box" id="errorBox" style="display:none;"></div>
+
+  <!-- NWS Alert banners rendered here -->
+  <div class="alert-list" id="alertList"></div>
+
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">Requesting location…</div>
+  </div>
+
+  <div id="mainContent" style="display:none;">
+
+    <div class="current-grid">
+      <div>
+        <div class="condition-label">Current Conditions</div>
+        <div class="temp-big"><span id="currentTemp">—</span><span class="unit" id="unitLabel">°F</span></div>
+        <div class="condition-text" id="currentCond">—</div>
+        <div class="feels-like" id="feelsLike">—</div>
+      </div>
+      <div class="icon-glow-wrap">
+        <div class="icon-glow-ellipse" id="iconGlowEllipse"></div>
+        <img class="wx-icon-lg" id="currentIcon" src="" alt=""/>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Humidity</div>
+        <div class="stat-value"><span id="humidity">—</span><span class="stat-unit">%</span></div>
+        <div class="stat-icon"><i class="ph ph-drop" aria-hidden="true"></i></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Wind</div>
+        <div class="stat-value"><span id="wind">—</span><span class="stat-unit" id="windUnit">mph</span></div>
+        <div class="stat-icon"><i class="ph ph-wind" aria-hidden="true"></i></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Wind Dir</div>
+        <div class="stat-value" id="windDir">—</div>
+        <div class="stat-icon"><i class="ph ph-compass" aria-hidden="true"></i></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Precipitation</div>
+        <div class="stat-value"><span id="precip">—</span><span class="stat-unit">mm</span></div>
+        <div class="stat-icon"><i class="ph ph-umbrella" aria-hidden="true"></i></div>
+      </div>
+    </div>
+
+    <div class="section-header"><div class="section-title">Hourly</div><div class="section-line"></div></div>
+    <div class="hourly-scroll" id="hourlyRow"></div>
+
+    <div class="section-header"><div class="section-title">7-Day Forecast</div><div class="section-line"></div></div>
+    <div class="forecast-list" id="forecastList"></div>
+
+    <div class="section-header"><div class="section-title">Conditions Detail</div><div class="section-line"></div></div>
+    <div class="info-grid">
+      <div class="info-card">
+        <div class="info-card-label">UV Index</div>
+        <div class="info-card-value" id="uvValue">—</div>
+        <div class="info-card-desc" id="uvDesc">—</div>
+        <div class="uv-bar"><div class="uv-marker" id="uvMarker" style="left:0%"></div></div>
+      </div>
+      <div class="info-card">
+        <div class="info-card-label">Apparent Temp</div>
+        <div class="info-card-value" id="apparentTemp">—</div>
+        <div class="info-card-desc">Feels like outside</div>
+      </div>
+      <div class="info-card">
+        <div class="info-card-label">Cloud Cover</div>
+        <div class="info-card-value" id="cloudCover">—</div>
+        <div class="info-card-desc" id="cloudDesc">—</div>
+      </div>
+
+    </div>
+
+    <div class="section-header"><div class="section-title">Sun Position</div><div class="section-line"></div></div>
+    <div class="sun-card">
+      <div class="sun-arc-wrap">
+        <svg class="sun-arc-svg" viewBox="0 0 300 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <line x1="10" y1="100" x2="290" y2="100" stroke="var(--arc-line)" stroke-width="1"/>
+          <line x1="10" y1="96" x2="10" y2="104" stroke="var(--arc-tick)" stroke-width="1"/>
+          <line x1="290" y1="96" x2="290" y2="104" stroke="var(--arc-tick)" stroke-width="1"/>
+          <path d="M 10 100 Q 150 -10 290 100" stroke="var(--arc-dash)" stroke-width="1" stroke-dasharray="4 3"/>
+          <path id="sunArcProgress" d="M 10 100 Q 150 -10 290 100" stroke="url(#sunGrad)" stroke-width="2" stroke-dasharray="390" stroke-dashoffset="390"/>
+          <circle id="sunDot" cx="10" cy="100" r="8" fill="#ffdd44" opacity="0.9" filter="url(#sunGlow)"/>
+          <circle id="sunDotHalo" cx="10" cy="100" r="12" fill="rgba(255,220,50,0.12)"/>
+          <defs>
+            <linearGradient id="sunGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ff8844"/><stop offset="50%" stop-color="#ffdd44"/><stop offset="100%" stop-color="#ff6644"/>
+            </linearGradient>
+            <filter id="sunGlow">
+              <feGaussianBlur stdDeviation="3" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <text id="sunriseLabel" x="10"  y="115" fill="var(--sun-label)" font-size="13" font-family="'Google Sans Code', monospace">—</text>
+          <text id="sunsetLabel"  x="230" y="115" fill="var(--sun-label)" font-size="13" font-family="'Google Sans Code', monospace">—</text>
+        </svg>
+      </div>
+      <div class="sun-times">
+        <div class="sun-time-item"><div class="sun-time-label">Sunrise</div><div class="sun-time-val" id="sunriseVal">—</div></div>
+        <div class="sun-time-item"><div class="sun-time-label">Sunset</div><div class="sun-time-val"  id="sunsetVal">—</div></div>
+        <div class="sun-daylight" id="daylightVal">—</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="settings-bar">
+    <div class="settings-bar-section">
+      <div class="settings-bar-label">TEMPERATURE</div>
+      <div class="settings-bar-group">
+        <button class="unit-btn active" id="btnF2" onclick="setUnit('F')">°F</button>
+        <button class="unit-btn"        id="btnC2" onclick="setUnit('C')">°C</button>
+      </div>
+    </div>
+    <div class="settings-bar-section">
+      <div class="settings-bar-label">TIME</div>
+      <div class="settings-bar-group">
+        <button class="unit-btn active" id="btn12" onclick="setTimeFormat('12')">12H</button>
+        <button class="unit-btn"        id="btn24" onclick="setTimeFormat('24')">24H</button>
+      </div>
+    </div>
+    <div class="settings-bar-section">
+      <div class="settings-bar-label">THEME</div>
+      <div class="settings-bar-group">
+        <button class="unit-btn"        id="themeBtn-system"   onclick="setTheme('system')">⚙ SYS</button>
+        <button class="unit-btn"        id="themeBtn-light"    onclick="setTheme('light')">☀ LIGHT</button>
+        <button class="unit-btn"        id="themeBtn-dark"     onclick="setTheme('dark')">🌙 DARK</button>
+      </div>
+    </div>
+    <div class="settings-bar-section">
+      <div class="settings-bar-label">AUTO-REFRESH</div>
+      <div class="settings-bar-group">
+        <button class="unit-btn" id="refreshBtn-5"         onclick="setAutoRefresh(5)">5M</button>
+        <button class="unit-btn" id="refreshBtn-15"        onclick="setAutoRefresh(15)">15M</button>
+        <button class="unit-btn active" id="refreshBtn-30" onclick="setAutoRefresh(30)">30M</button>
+        <button class="unit-btn" id="refreshBtn-60"        onclick="setAutoRefresh(60)">1H</button>
+        <button class="unit-btn" id="refreshBtn-120"       onclick="setAutoRefresh(120)">2H</button>
+        <button class="unit-btn" id="refreshBtn-0"         onclick="setAutoRefresh(0)">OFF</button>
+      </div>
+    </div>
+
+
+  </div>
+
+  <div class="footer">
+    <div class="footer-brand"><span style="color:var(--accent); transition:color 1.2s ease;">Silver Skies</span> · Late Night Interactive</div>
+    <div class="footer-credit"><a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> · <a href="https://www.weather.gov" target="_blank" rel="noopener">NWS</a> · <a href="https://weather.gc.ca" target="_blank" rel="noopener">ECCC</a> · <a href="https://bas.dev/work/weather-icons" target="_blank" rel="noopener">Meteocons</a></div>
+  </div>
+
+  <div class="demo-panel">
+    <div class="demo-label">⚠ ALERT DEMO</div>
+    <div class="demo-row">
+      <select class="demo-select" id="demoAlertSelect">
+        <optgroup label="Tornado">
+          <option value="Tornado Emergency|Extreme">Tornado Emergency</option>
+          <option value="Tornado Warning (PDS)|Extreme">Tornado Warning (PDS)</option>
+          <option value="Confirmed Tornado Warning|Extreme">Tornado Warning (Confirmed)</option>
+          <option value="Tornado Warning|Extreme">Tornado Warning</option>
+          <option value="Tornado Watch|Severe">Tornado Watch</option>
+        </optgroup>
+        <optgroup label="Severe Thunderstorm">
+          <option value="Severe Thunderstorm Warning (PDS)|Extreme">Severe T-Storm Warning (PDS)</option>
+          <option value="Severe Thunderstorm Warning (Destructive)|Extreme">Severe T-Storm Warning (Destructive)</option>
+          <option value="Severe Thunderstorm Warning|Severe">Severe Thunderstorm Warning</option>
+          <option value="Severe Thunderstorm Watch|Moderate">Severe Thunderstorm Watch</option>
+          <option value="Severe Weather Statement|Moderate">Severe Weather Statement</option>
+        </optgroup>
+        <optgroup label="Tropical">
+          <option value="Hurricane Warning|Extreme">Hurricane Warning</option>
+          <option value="Hurricane Watch|Severe">Hurricane Watch</option>
+          <option value="Hurricane Local Statement|Moderate">Hurricane Local Statement</option>
+          <option value="Tropical Storm Warning|Severe">Tropical Storm Warning</option>
+          <option value="Tropical Storm Watch|Moderate">Tropical Storm Watch</option>
+          <option value="Tropical Depression Statement|Minor">Tropical Depression Statement</option>
+        </optgroup>
+        <optgroup label="Flood">
+          <option value="Flash Flood Emergency|Extreme">Flash Flood Emergency</option>
+          <option value="Flash Flood Warning|Severe">Flash Flood Warning</option>
+          <option value="Flash Flood Watch|Moderate">Flash Flood Watch</option>
+          <option value="Coastal Flood Warning|Severe">Coastal Flood Warning</option>
+          <option value="Coastal Flood Watch|Moderate">Coastal Flood Watch</option>
+          <option value="Coastal Flood Advisory|Minor">Coastal Flood Advisory</option>
+          <option value="Lakeshore Flood Warning|Severe">Lakeshore Flood Warning</option>
+          <option value="Hydrological Outlook|Minor">Hydrological Outlook</option>
+        </optgroup>
+        <optgroup label="Winter">
+          <option value="Blizzard Warning|Extreme">Blizzard Warning</option>
+          <option value="Ice Storm Warning|Severe">Ice Storm Warning</option>
+          <option value="Snow Squall Warning|Severe">Snow Squall Warning</option>
+          <option value="Winter Storm Warning|Severe">Winter Storm Warning</option>
+          <option value="Lake Effect Snow Warning|Severe">Lake Effect Snow Warning</option>
+          <option value="Lake Effect Snow Advisory|Moderate">Lake Effect Snow Advisory</option>
+          <option value="Wind Chill Warning|Extreme">Wind Chill Warning</option>
+          <option value="Wind Chill Watch|Severe">Wind Chill Watch</option>
+          <option value="Wind Chill Advisory|Moderate">Wind Chill Advisory</option>
+          <option value="Freezing Rain Advisory|Moderate">Freezing Rain Advisory</option>
+          <option value="Sleet Warning|Moderate">Sleet Warning</option>
+          <option value="Hard Freeze Warning|Severe">Hard Freeze Warning</option>
+          <option value="Hard Freeze Watch|Moderate">Hard Freeze Watch</option>
+          <option value="Freeze Warning|Moderate">Freeze Warning</option>
+          <option value="Freeze Watch|Minor">Freeze Watch</option>
+        </optgroup>
+        <optgroup label="Wind">
+          <option value="Extreme Wind Warning|Extreme">Extreme Wind Warning</option>
+          <option value="High Wind Warning|Severe">High Wind Warning</option>
+          <option value="High Wind Watch|Moderate">High Wind Watch</option>
+          <option value="Wind Advisory|Minor">Wind Advisory</option>
+          <option value="Gale Warning|Severe">Gale Warning</option>
+        </optgroup>
+        <optgroup label="Fire">
+          <option value="Red Flag Warning|Severe">Red Flag Warning</option>
+          <option value="Fire Weather Watch|Moderate">Fire Weather Watch</option>
+          <option value="Extreme Fire Danger|Extreme">Extreme Fire Danger</option>
+        </optgroup>
+        <optgroup label="Heat">
+          <option value="Extreme Heat Warning|Extreme">Extreme Heat Warning</option>
+          <option value="Excessive Heat Warning|Severe">Excessive Heat Warning</option>
+          <option value="Excessive Heat Watch|Severe">Excessive Heat Watch</option>
+          <option value="Heat Advisory|Moderate">Heat Advisory</option>
+        </optgroup>
+        <optgroup label="Fog / Visibility / Air">
+          <option value="Dense Fog Advisory|Minor">Dense Fog Advisory</option>
+          <option value="Dense Smoke Advisory|Minor">Dense Smoke Advisory</option>
+          <option value="Air Quality Alert|Moderate">Air Quality Alert</option>
+          <option value="Low Water Advisory|Minor">Low Water Advisory</option>
+        </optgroup>
+        <optgroup label="Dust">
+          <option value="Dust Storm Warning|Extreme">Dust Storm Warning</option>
+          <option value="Blowing Dust Advisory|Moderate">Blowing Dust Advisory</option>
+        </optgroup>
+        <optgroup label="Coastal / Marine">
+          <option value="Storm Surge Warning|Extreme">Storm Surge Warning</option>
+          <option value="Storm Surge Watch|Severe">Storm Surge Watch</option>
+          <option value="Tsunami Warning|Extreme">Tsunami Warning</option>
+          <option value="Tsunami Watch|Severe">Tsunami Watch</option>
+          <option value="Tsunami Advisory|Moderate">Tsunami Advisory</option>
+          <option value="High Surf Warning|Severe">High Surf Warning</option>
+          <option value="High Surf Advisory|Moderate">High Surf Advisory</option>
+          <option value="Rip Current Statement|Minor">Rip Current Statement</option>
+          <option value="Special Marine Warning|Severe">Special Marine Warning</option>
+        </optgroup>
+        <optgroup label="Volcanic / Geologic">
+          <option value="Volcano Warning|Extreme">Volcano Warning</option>
+          <option value="Ashfall Warning|Extreme">Ashfall Warning</option>
+          <option value="Ashfall Advisory|Moderate">Ashfall Advisory</option>
+          <option value="Debris Flow Warning|Extreme">Debris Flow Warning</option>
+          <option value="Avalanche Warning|Extreme">Avalanche Warning</option>
+          <option value="Avalanche Watch|Severe">Avalanche Watch</option>
+          <option value="Avalanche Advisory|Moderate">Avalanche Advisory</option>
+          <option value="Earthquake Warning|Extreme">Earthquake Warning</option>
+          <option value="Earthquake Advisory|Moderate">Earthquake Advisory</option>
+          <option value="Aftershock Advisory|Minor">Aftershock Advisory</option>
+        </optgroup>
+        <optgroup label="Evacuation">
+          <option value="Evacuation Immediate|Extreme">Evacuation Immediate</option>
+          <option value="Evacuation Warning|Severe">Evacuation Warning</option>
+          <option value="Evacuation Watch|Moderate">Evacuation Watch</option>
+        </optgroup>
+        <optgroup label="Civil / Government">
+          <option value="Civil Emergency Message|Extreme">Civil Emergency Message</option>
+          <option value="Shelter In Place Warning|Extreme">Shelter In Place Warning</option>
+          <option value="Child Abduction Emergency|Extreme">Child Abduction Emergency (AMBER)</option>
+          <option value="Blue Alert|Extreme">Blue Alert</option>
+          <option value="Law Enforcement Warning|Severe">Law Enforcement Warning</option>
+          <option value="Nuclear Power Plant Warning|Extreme">Nuclear Power Plant Warning</option>
+          <option value="911 Telephone Outage Emergency|Severe">911 Telephone Outage</option>
+          <option value="Emergency Action Notification|Extreme">Emergency Action Notification</option>
+          <option value="Administrative Message|Minor">Administrative Message</option>
+        </optgroup>
+        <optgroup label="General">
+          <option value="Special Weather Statement|Minor">Special Weather Statement</option>
+        </optgroup>
+        <optgroup label="🌑">
+          <option value="__ASTEROID__|Extreme">Asteroid Impact Warning</option>
+        </optgroup>
+      </select>
+      <button class="demo-btn" onclick="addDemoAlert()">ADD ALERT</button>
+      <button class="demo-btn demo-btn-clear" onclick="clearDemoAlerts()">CLEAR</button>
+    </div>
+  </div>
+
+</div>
+<div id="asteroidCountdown"></div>
+<script>
+// ═══════════════════════════════════════════════════════
+// LIGHT / DARK MODE
+// ═══════════════════════════════════════════════════════
+// Modes: 'location' → follows is_day | 'system' → OS | 'light' | 'dark'
+let themeMode = localStorage.getItem('ss-theme') || 'system';
+let currentIsDay = true; // updated from weather data
+
+function resolveTheme() {
+  if (themeMode === 'light') return 'light';
+  if (themeMode === 'dark')  return 'dark';
+  if (themeMode === 'location') return currentIsDay ? 'light' : 'dark';
+  // 'system' — follow OS preference
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function applyThemeMode() {
+  const resolved = resolveTheme();
+  document.documentElement.setAttribute('data-theme', resolved);
+  // Sync theme buttons in settings panel
+  ['location','system','light','dark'].forEach(m => {
+    const btn = document.getElementById(`themeBtn-${m}`);
+    if (btn) btn.classList.toggle('active', m === themeMode);
+  });
+}
+
+function setTheme(mode) {
+  themeMode = mode;
+  localStorage.setItem('ss-theme', themeMode);
+  applyThemeMode();
+  applyPulse();
+  if (wxData) {
+    applyTheme(wxData.current.weather_code, wxData.current.is_day === 1);
+    renderAll();
+  }
+}
+
+// Apply immediately and listen for OS changes
+applyThemeMode();
+window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+  if (themeMode === 'system') applyThemeMode();
+});
+
+// ═══════════════════════════════════════════════════════
+// SETTINGS MODAL
+// ═══════════════════════════════════════════════════════
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSettings(); });
+
+// ═══════════════════════════════════════════════════════
+// TIME FORMAT
+// ═══════════════════════════════════════════════════════
+let timeFormat = localStorage.getItem('ss-timefmt') || '12';
+
+function setTimeFormat(fmt) {
+  timeFormat = fmt;
+  localStorage.setItem('ss-timefmt', fmt);
+  document.getElementById('btn12').classList.toggle('active', fmt === '12');
+  document.getElementById('btn24').classList.toggle('active', fmt === '24');
+  updateClock();
+  if (wxData) renderAll();
+}
+
+// Init toggle state
+document.getElementById('btn12').classList.toggle('active', timeFormat === '12');
+document.getElementById('btn24').classList.toggle('active', timeFormat === '24');
+
+// ═══════════════════════════════════════════════════════
+// THEME — dynamic accent color per weather condition
+// ═══════════════════════════════════════════════════════
+// Each entry: [r, g, b] of the accent color
+const CONDITION_THEMES = {
+  clear_day:      [255, 200,  60],   // warm gold
+  clear_night:    [ 80, 120, 220],   // deep blue
+  partly_cloudy:  [100, 180, 255],   // sky blue
+  overcast:       [140, 150, 170],   // cool grey-blue
+  fog:            [160, 160, 180],   // muted lavender-grey
+  drizzle:        [ 80, 160, 220],   // steel blue
+  rain:           [ 60, 130, 210],   // rain blue
+  heavy_rain:     [ 40, 100, 180],   // deep rain
+  snow:           [180, 220, 255],   // ice blue
+  thunderstorm:   [138, 100, 255],   // purple (per spec)
+  hot:            [255, 120,  40],   // orange heat
+  windy:          [100, 200, 180],   // teal
+};
+
+function conditionThemeKey(code, isDay) {
+  if ([95,96,99].includes(code)) return 'thunderstorm';
+  if ([71,73,75,77,85,86].includes(code)) return 'snow';
+  if ([65,82].includes(code)) return 'heavy_rain';
+  if ([61,63,80,81].includes(code)) return 'rain';
+  if ([51,53,55].includes(code)) return 'drizzle';
+  if ([45,48].includes(code)) return 'fog';
+  if (code === 3) return 'overcast';
+  if ([1,2].includes(code)) return 'partly_cloudy';
+  if (code === 0) return isDay ? 'clear_day' : 'clear_night';
+  return isDay ? 'clear_day' : 'clear_night';
+}
+
+function applyTheme(code, isDay) {
+  // Update day/night state for location-based theme
+  currentIsDay = isDay;
+  applyThemeMode();
+
+  const key = conditionThemeKey(code, isDay);
+  let [r, g, b] = CONDITION_THEMES[key] || CONDITION_THEMES.clear_day;
+  // In light mode, darken very bright/pale accents so they stay readable on white
+  if (resolveTheme() === 'light') {
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    if (brightness > 160) {
+      const scale = 140 / brightness;
+      r = Math.round(r * scale);
+      g = Math.round(g * scale);
+      b = Math.round(b * scale);
+    }
+  }
+  document.documentElement.style.setProperty('--a0', `${r},${g},${b}`);
+
+}
+
+
+
+
+// ── Top glow bar ──────────────────────────────────────────────────────────
+function applyTopGlow() {
+  const el = document.getElementById('top-glow');
+  if (!el) return;
+
+  let r, g, b;
+  if (activePulseColor) {
+    const hex = activePulseColor.replace('#', '');
+    r = parseInt(hex.slice(0,2), 16);
+    g = parseInt(hex.slice(2,4), 16);
+    b = parseInt(hex.slice(4,6), 16);
+    el.classList.add('pulsing');
+  } else {
+    const a0 = getComputedStyle(document.documentElement).getPropertyValue('--a0').trim() || '138,100,255';
+    [r,g,b] = a0.split(',').map(Number);
+    el.classList.remove('pulsing');
+  }
+
+  // Feed the color in as a custom property — the gradient, glow, and sweep animation
+  // itself live in CSS (#top-glow) so the animation keeps running smoothly across updates.
+  el.style.setProperty('--tg', `${r},${g},${b}`);
+}
+
+// ═══════════════════════════════════════════════════════
+// ECCC (ENVIRONMENT CANADA) ALERTS
+// ═══════════════════════════════════════════════════════
+
+function isCanada(lat, lon) {
+  return lat >= 41.7 && lat <= 83.1 && lon >= -141.0 && lon <= -52.6;
+}
+
+// ECCC color from the risk_colour_en field
+function ecccColorFromColour(colour) {
+  if (colour === 'red')    return { bg: '#cc0000', pulse: '#cc0000' };
+  if (colour === 'orange') return { bg: '#dd5500', pulse: '#dd5500' };
+  if (colour === 'yellow') return { bg: '#bb8800', pulse: null };
+  return { bg: '#444455', pulse: null };  // statement / no colour
+}
+
+// Fetch ECCC active alerts for a point via GeoMet OGC API
+async function fetchEcccAlerts(lat, lon) {
+  // Use CQL2 INTERSECTS with a point — much more accurate than bbox for large alert zones
+  const filter = `INTERSECTS(geometry,POINT(${lon} ${lat}))`;
+  const url = `https://api.weather.gc.ca/collections/weather-alerts/items?filter=${encodeURIComponent(filter)}&lang=en&f=json&limit=30`;
+  console.log('[ECCC] isCanada:', isCanada(lat,lon), 'lat:', lat, 'lon:', lon);
+  console.log('[ECCC] url:', url);
+  try {
+    const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    console.log('[ECCC] status:', r.status);
+    if (!r.ok) { console.warn('[ECCC] HTTP error', r.status, await r.text()); return []; }
+    const data = await r.json();
+    console.log('[ECCC] features:', data.features?.length ?? 0, data.numberMatched);
+    return (data.features || []).map(f => {
+      const p = f.properties || {};
+      // API gives us risk_colour_en directly — no title parsing needed
+      const colour = (p.risk_colour_en || '').toLowerCase();
+      return {
+        _eccc: true,
+        properties: {
+          event:       p.alert_name_en || p.alert_short_name_en || 'Weather Alert',
+          headline:    p.alert_name_en || '',
+          description: p.alert_text_en || '',
+          onset:       p.validity_datetime || null,
+          expires:     p.expiration_datetime || null,
+          severity:    p.impact_en || 'Unknown',
+          _ecccColour: colour,  // 'red' | 'orange' | 'yellow' | ''
+        }
+      };
+    });
+  } catch(e) {
+    console.warn('[ECCC] alert fetch failed:', e);
+    return [];
+  }
+}
+
+// ECCC color class from the risk_colour_en field
+function ecccAlertClass(props) {
+  const c = (props._ecccColour || '').toLowerCase();
+  if (c === 'red')    return 'eccc-red';
+  if (c === 'orange') return 'eccc-orange';
+  if (c === 'yellow') return 'eccc-yellow';
+  return 'eccc-statement';
+}
+
+// ═══════════════════════════════════════════════════════
+// ICON SETS — Meteocons (large current-conditions icon) + Google Weather (condensed bar)
+// ═══════════════════════════════════════════════════════
+
+// Base URLs
+const GW_BASE  = 'https://cdn.jsdelivr.net/gh/mrdarrengriffin/google-weather-icons@main/sets/set-6/';
+
+// WMO → Google Weather set-4 filename (day/night)
+function gwIconName(code, isDay) {
+  const d = isDay;
+  const theme = resolveTheme() === 'light' ? 'light' : 'dark';
+  const map = {
+    0:  d ? 'sunny.svg'              : 'clear_night.svg',
+    1:  d ? 'mostly_sunny.svg'       : 'mostly_clear_night.svg',
+    2:  d ? 'partly_cloudy.svg'      : 'partly_cloudy_night.svg',
+    3:  'cloudy.svg',
+    45: 'cloudy.svg',
+    48: 'cloudy.svg',
+    51: 'drizzle.svg',
+    53: 'drizzle.svg',
+    55: 'drizzle.svg',
+    56: 'wintry_mix.svg',
+    57: 'sleet_hail.svg',
+    61: 'drizzle.svg',
+    63: 'heavy_rain.svg',
+    65: 'heavy_rain.svg',
+    66: 'wintry_mix.svg',
+    67: 'sleet_hail.svg',
+    71: 'flurries.svg',
+    73: 'heavy_snow.svg',
+    75: 'heavy_snow.svg',
+    77: 'flurries.svg',
+    80: d ? 'partly_cloudy.svg'      : 'partly_cloudy_night.svg',
+    81: 'heavy_rain.svg',
+    82: 'heavy_rain.svg',
+    85: 'flurries.svg',
+    86: 'heavy_snow.svg',
+    95: 'strong_thunderstorms.svg',
+    96: 'strong_thunderstorms.svg',
+    99: 'strong_thunderstorms.svg',
+  };
+  const file = map[code] || 'cloudy.svg';
+  return GW_BASE + theme + '/' + file;
+}
+
+
+// Render a Google Weather icon <img>
+function gwIconHtml(code, isDay, sizeClass) {
+  const sz  = sizeClass === 'wi-lg' ? 'gw-icon-lg' : sizeClass === 'wi-md' ? 'gw-icon-md' : 'gw-icon-sm';
+  const src = gwIconName(code, isDay);
+  return `<img class="${sz}" src="${src}" alt="" loading="lazy"/>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// ICONS — Meteocons
+// ═══════════════════════════════════════════════════════
+const ICON_BASE      = 'https://meteocons.com/icons/line/';
+const ICON_BASE_FILL = 'https://meteocons.com/icons/fill/';
+
+function wmoIconName(code, isDay=true) {
+  const m = {
+    0:  isDay?'clear-day':'clear-night',
+    1:  isDay?'mostly-clear-day':'mostly-clear-night',
+    2:  isDay?'partly-cloudy-day':'partly-cloudy-night',
+    3:  'overcast',
+    45:'fog', 48:'fog',
+    51:'drizzle', 53:'drizzle', 55:'drizzle',
+    61: isDay?'partly-cloudy-day-rain':'partly-cloudy-night-rain',
+    63:'rain', 65:'rain',
+    71: isDay?'partly-cloudy-day-snow':'partly-cloudy-night-snow',
+    73:'snow', 75:'snow', 77:'snow',
+    80: isDay?'partly-cloudy-day-rain':'partly-cloudy-night-rain',
+    81:'rain', 82:'rain',
+    85: isDay?'partly-cloudy-day-snow':'partly-cloudy-night-snow',
+    86:'snow',
+    95: isDay?'thunderstorms-day':'thunderstorms-night',
+    96: isDay?'thunderstorms-day-rain':'thunderstorms-night-rain',
+    99: isDay?'thunderstorms-day-rain':'thunderstorms-night-rain',
+  };
+  return m[code] || 'not-available';
+}
+const wmoIcon     = (c,d=true) => resolveTheme()==='light' ? `${ICON_BASE_FILL}${wmoIconName(c,d)}.svg` : `${ICON_BASE}${wmoIconName(c,d)}.svg`;
+
+// Static Phosphor glyphs for hourly/7-day icons — small, repeated, many-on-screen-at-once
+// icons are exactly where animated SVGs (meteocons/Google) become an accessibility problem,
+// so these stay as plain non-animated font icons regardless of the meteocons/Google toggle.
+function wmoPhosphorName(code, isDay=true) {
+  const m = {
+    0: isDay?'sun':'moon-stars',
+    1: isDay?'sun':'moon-stars',
+    2: isDay?'cloud-sun':'cloud-moon',
+    3: 'cloud',
+    45:'cloud-fog', 48:'cloud-fog',
+    51:'cloud-rain', 53:'cloud-rain', 55:'cloud-rain',
+    61:'cloud-rain', 63:'cloud-rain', 65:'cloud-rain',
+    71:'cloud-snow', 73:'cloud-snow', 75:'cloud-snow', 77:'cloud-snow',
+    80:'cloud-rain', 81:'cloud-rain', 82:'cloud-rain',
+    85:'cloud-snow', 86:'cloud-snow',
+    95:'cloud-lightning', 96:'cloud-lightning', 99:'cloud-lightning',
+  };
+  return m[code] || 'question';
+}
+function wmoPhosphorHtml(code, isDay, sizeClass) {
+  return `<i class="ph ph-${wmoPhosphorName(code,isDay)} ${sizeClass}" aria-hidden="true"></i>`;
+}
+function wmoLabel(code) {
+  const m = {
+    0:'Clear Sky',1:'Mainly Clear',2:'Partly Cloudy',3:'Overcast',
+    45:'Fog',48:'Icy Fog',51:'Light Drizzle',53:'Drizzle',55:'Heavy Drizzle',
+    61:'Light Rain',63:'Rain',65:'Heavy Rain',71:'Light Snow',73:'Snow',
+    75:'Heavy Snow',77:'Snow Grains',80:'Light Showers',81:'Showers',
+    82:'Heavy Showers',85:'Snow Showers',86:'Heavy Snow Showers',
+    95:'Thunderstorm',96:'Thunderstorm + Hail',99:'Severe Thunderstorm',
+  };
+  return m[code] || 'Unknown';
+}
+
+// ═══════════════════════════════════════════════════════
+// NWS ALERTS
+// ═══════════════════════════════════════════════════════
+
+// Map event name keywords → CSS class (first match wins)
+const ALERT_CLASS_MAP = [
+  // ── Tornado ──────────────────────────────────────────
+  // (Tornado Emergency detected via headline in alertClass, not here)
+  [/tornado warning/i,                          'alert-tornado-warning'],
+  [/tornado watch/i,                            'alert-tornado-watch'],
+  // ── Severe Thunderstorm ───────────────────────────────
+  // (PDS/Destructive detected via headline in alertClass, not here)
+  [/severe thunderstorm warning/i,              'alert-severe-tstorm-warn'],
+  [/severe thunderstorm watch/i,                'alert-severe-tstorm-watch'],
+  [/severe weather statement/i,                 'alert-severe-wx-stmt'],
+  // ── Tropical ─────────────────────────────────────────
+  [/hurricane warning/i,                        'alert-hurricane-warning'],
+  [/hurricane watch/i,                          'alert-hurricane-watch'],
+  [/hurricane local statement/i,                'alert-hurricane-statement'],
+  [/tropical storm warning/i,                   'alert-tropical-storm-warn'],
+  [/tropical storm watch/i,                     'alert-tropical-storm-watch'],
+  [/tropical depression/i,                      'alert-tropical-depression'],
+  // ── Flood ────────────────────────────────────────────
+  [/flash flood emergency/i,                    'alert-flash-flood-emergency'],
+  [/flash flood warning/i,                      'alert-flash-flood-warn'],
+  [/flash flood watch/i,                        'alert-flash-flood-watch'],
+  [/flood warning/i,                            'alert-flood-warning'],
+  [/coastal flood warning/i,                    'alert-coastal-flood-warn'],
+  [/coastal flood watch/i,                      'alert-coastal-flood-watch'],
+  [/coastal flood advisory/i,                   'alert-coastal-flood-adv'],
+  [/lakeshore flood warning/i,                  'alert-lakeshore-flood-warn'],
+  [/hydrological outlook|hydrology/i,           'alert-hydrological'],
+  // ── Winter ───────────────────────────────────────────
+  [/blizzard warning/i,                         'alert-blizzard'],
+  [/ice storm warning/i,                        'alert-ice-storm'],
+  [/snow squall warning/i,                      'alert-snow-squall'],
+  [/lake effect snow warning/i,                 'alert-lake-effect-snow-warn'],
+  [/lake effect snow advisory/i,                'alert-lake-effect-snow-adv'],
+  [/wind chill warning/i,                       'alert-wind-chill-warn'],
+  [/wind chill watch/i,                         'alert-wind-chill-watch'],
+  [/wind chill advisory/i,                      'alert-wind-chill-adv'],
+  [/freezing rain advisory|freezing drizzle/i,  'alert-freezing-rain-adv'],
+  [/sleet warning|sleet advisory/i,             'alert-sleet-warn'],
+  [/hard freeze warning/i,                      'alert-hard-freeze-warn'],
+  [/hard freeze watch/i,                        'alert-hard-freeze-watch'],
+  [/freeze warning/i,                           'alert-freeze-warn'],
+  [/freeze watch/i,                             'alert-freeze-watch'],
+  // ── Wind ─────────────────────────────────────────────
+  [/extreme wind warning/i,                     'alert-extreme'],
+  [/high wind warning/i,                        'alert-severe'],
+  [/high wind watch/i,                          'alert-moderate'],
+  [/wind advisory/i,                            'alert-wind-adv'],
+  [/gale warning/i,                             'alert-gale-warn'],
+  // ── Fire ─────────────────────────────────────────────
+  [/red flag warning/i,                         'alert-severe'],
+  [/fire weather watch/i,                       'alert-fire-watch'],
+  [/extreme fire danger/i,                      'alert-extreme-fire'],
+  // ── Heat ─────────────────────────────────────────────
+  [/excessive heat warning/i,                   'alert-extreme'],
+  [/excessive heat watch/i,                     'alert-excessive-heat-watch'],
+  [/heat advisory/i,                            'alert-heat-adv'],
+  [/extreme heat warning/i,                     'alert-extreme'],
+  // ── Fog / Visibility / Air ───────────────────────────
+  [/dense fog advisory/i,                       'alert-dense-fog-adv'],
+  [/dense smoke advisory/i,                     'alert-dense-smoke-adv'],
+  [/air quality alert|air quality advisory/i,   'alert-air-quality'],
+  [/low water advisory/i,                       'alert-low-water-adv'],
+  // ── Dust ─────────────────────────────────────────────
+  [/dust storm warning/i,                       'alert-dust-storm'],
+  [/blowing dust advisory/i,                    'alert-blowing-dust'],
+  // ── Coastal / Marine / Surf ──────────────────────────
+  [/storm surge warning/i,                      'alert-storm-surge-warn'],
+  [/storm surge watch/i,                        'alert-storm-surge-watch'],
+  [/tsunami warning/i,                          'alert-tsunami-warn'],
+  [/tsunami watch/i,                            'alert-tsunami-watch'],
+  [/tsunami advisory/i,                         'alert-tsunami-adv'],
+  [/high surf warning/i,                        'alert-high-surf-warn'],
+  [/high surf advisory/i,                       'alert-high-surf-adv'],
+  [/rip current statement/i,                    'alert-rip-current'],
+  [/special marine warning/i,                   'alert-marine-warning'],
+  // ── Volcanic / Geologic ──────────────────────────────
+  [/volcano warning/i,                          'alert-volcano'],
+  [/ashfall warning/i,                          'alert-ashfall-warn'],
+  [/ashfall advisory/i,                         'alert-ashfall-adv'],
+  [/debris flow/i,                              'alert-debris-flow'],
+  [/avalanche warning/i,                        'alert-avalanche-warn'],
+  [/avalanche watch/i,                          'alert-avalanche-watch'],
+  [/avalanche advisory/i,                       'alert-avalanche-adv'],
+  [/earthquake warning/i,                       'alert-earthquake'],
+  [/earthquake advisory/i,                      'alert-earthquake-advisory'],
+  [/aftershock/i,                               'alert-aftershock'],
+  // ── Evacuation ───────────────────────────────────────
+  // NWS's real product name is "Evacuation - Immediate" (with a dash) — tolerate it.
+  [/evacuation\s*-?\s*immediate/i,              'alert-evacuation'],
+  [/evacuation\s*-?\s*warning/i,                'alert-evacuation-warning'],
+  [/evacuation\s*-?\s*watch/i,                  'alert-evacuation-watch'],
+  // ── Civil / Government ───────────────────────────────
+  [/civil emergency/i,                          'alert-civil-emergency'],
+  [/shelter.?in.?place/i,                       'alert-shelter-in-place'],
+  [/blue alert/i,                               'alert-blue-alert'],
+  [/law enforcement/i,                          'alert-law-enforcement'],
+  [/child abduction emergency|amber alert/i,    'alert-amber'],
+  [/911 telephone outage/i,                     'alert-911-outage'],
+  [/nuclear power plant/i,                      'alert-nuclear'],
+  [/emergency action notification|national emergency/i, 'alert-ean'],
+  [/administrative message/i,                   'alert-admin-message'],
+  [/asteroid/i,                                 'alert-asteroid'],
+  // ── General ──────────────────────────────────────────
+  [/special weather statement/i,                'alert-special-wx-stmt'],
+];
+
+// Events that trigger background pulse and their specific flash color
+const PULSE_EVENT_MAP = [
+  [/tornado warning/i,            '#ff0550'],
+  [/particularly dangerous situation.*severe thunderstorm|severe thunderstorm.*particularly dangerous situation/i, '#ff3300'],
+  [/destructive.*severe thunderstorm|severe thunderstorm.*destructive/i, '#ff3300'],
+  [/hurricane warning/i,          '#ff0550'],
+  [/hurricane watch/i,            '#ff6680'],
+  [/tropical storm warning/i,     '#ff7905'],
+  [/evacuation immediate/i,       '#ffffff'],
+  [/evacuation warning/i,         '#ffe8b0'],
+  [/child abduction emergency|amber alert/i, '#ffdd00'],
+  [/blue alert/i,                 '#1a6eff'],
+  [/shelter.in.place/i,           '#ff2020'],
+  [/nuclear/i,                    '#39ff14'],
+  [/civil emergency/i,            '#e75480'],
+  [/extreme wind warning/i,       '#ff0550'],
+  [/flash flood emergency/i,      '#00d9c0'],
+  [/dust storm warning/i,         '#b08040'],
+  [/volcano warning/i,            '#cc4400'],
+  [/earthquake warning/i,         '#ff2020'],
+  [/storm surge warning/i,        '#ff44aa'],
+  [/tsunami warning/i,            '#ff00cc'],
+  [/avalanche warning/i,          '#ffffff'],
+  [/debris flow/i,                '#886633'],
+  [/ashfall warning/i,            '#aa8855'],
+  [/extreme fire danger/i,        '#ff4400'],
+  [/emergency action notification/i, '#ffffff'],
+];
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function toggleAlert(el) {
+  el.classList.toggle('expanded');
+}
+
+function getDisplayEvent(event, cls) {
+  // Override display name for NWS alerts where event field doesn't reflect true tier
+  if (cls === 'alert-tornado-emergency')  return 'Tornado Emergency';
+  if (cls === 'alert-tornado-pds')        return 'Tornado Warning (PDS)';
+  if (cls === 'alert-tornado-observed')   return 'Tornado Warning (Confirmed)';
+  if (cls === 'alert-svr-pds')            return 'Severe Thunderstorm Warning (PDS)';
+  if (cls === 'alert-svr-destructive')    return 'Severe Thunderstorm Warning (Destructive)';
+  return event;
+}
+
+function alertClass(event, severity, headline, description) {
+  const combined = `${event} ${headline || ''} ${description || ''}`;
+  // Tornado tiers — check event field directly first, then headline
+  if (/tornado emergency/i.test(event)) return 'alert-tornado-emergency';
+  if (/tornado warning/i.test(event)) {
+    if (/tornado emergency/i.test(combined)) return 'alert-tornado-emergency';
+    if (/particularly dangerous situation|PDS/i.test(combined)) return 'alert-tornado-pds';
+    if (/confirmed tornado|observed tornado/i.test(combined)) return 'alert-tornado-observed';
+  }
+  // PDS/Destructive SVR — same pattern
+  if (/severe thunderstorm warning/i.test(event)) {
+    if (/particularly dangerous situation|PDS/i.test(combined)) return 'alert-svr-pds';
+    if (/destructive/i.test(combined)) return 'alert-svr-destructive';
+  }
+  for (const [re, cls] of ALERT_CLASS_MAP) {
+    if (re.test(event)) return cls;
+  }
+  const sev = { Extreme:'alert-extreme', Severe:'alert-severe', Moderate:'alert-moderate', Minor:'alert-minor' };
+  return sev[severity] || 'alert-unknown';
+}
+
+function alertIcon(eventName) {
+  const e = eventName.toLowerCase();
+  const ic = (name) => `<i class="ph ph-${name} alert-mc-icon" aria-hidden="true"></i>`;
+
+  if (/tornado/.test(e))                                        return ic('tornado');
+  if (/hurricane|typhoon|tropical storm|tropical dep/.test(e))  return ic('hurricane');
+  if (/thunderstorm|severe thunder/.test(e))                    return ic('cloud-lightning');
+  if (/flash flood|flood/.test(e))                              return ic('waves');
+  if (/snow squall|blizzard|snow|winter|lake effect/.test(e))   return ic('snowflake');
+  if (/ice storm|sleet|freezing/.test(e))                       return ic('thermometer-snowflake');
+  if (/freeze|frost|wind chill|extreme cold|cold/.test(e))      return ic('thermometer-cold');
+  if (/heat|excessive heat/.test(e))                            return ic('thermometer-hot');
+  if (/high wind|wind|gale/.test(e))                            return ic('wind');
+  if (/dust storm|blowing dust/.test(e))                        return ic('wind');
+  if (/fog|dense fog/.test(e))                                  return ic('cloud-fog');
+  if (/haze|smoke|air quality|air stagnation/.test(e))          return ic('smiley-x-eyes');
+  if (/fire|red flag/.test(e))                                  return ic('fire');
+  if (/tsunami|storm surge/.test(e))                            return ic('waves');
+  if (/marine|coastal|surf|rip current/.test(e))                return ic('waves');
+  if (/avalanche/.test(e))                                      return ic('mountains');
+  if (/volcano|ash/.test(e))                                    return ic('mountains');
+  if (/nuclear|radiological|hazardous mat/.test(e))             return ic('radioactive');
+  if (/earthquake|aftershock/.test(e))                          return ic('waveform');
+  if (/evacuation|shelter.?in.?place/.test(e))                  return ic('door-open');
+  if (/civil emergency|civil danger/.test(e))                   return ic('warning');
+  if (/emergency action|national emergency/.test(e))            return ic('siren');
+  if (/law enforcement|blue alert/.test(e))                     return ic('shield-warning');
+  if (/911/.test(e))                                            return ic('phone-x');
+  if (/drizzle|shower|rain|rainfall|precip/.test(e))            return ic('cloud-rain');
+  // Fallback — warning triangle
+  return ic('warning');
+}
+
+
+
+function getPulseColorForClass(cls) {
+  const map = {
+    'eccc-red':                '#cc0000',
+    'eccc-orange':             '#dd5500',
+    'alert-tornado-emergency': '#8a0ba5',
+    'alert-tornado-pds':       '#7300ff',
+    'alert-tornado-observed':  '#bd0065',
+    'alert-tornado':           '#ff0550',
+    'alert-svr-pds':           '#ff3300',
+    'alert-svr-destructive':   '#ff3300',
+    'alert-svr':               '#ff6600',
+    'alert-hurricane':         '#ff0550',
+    'alert-ffe':               '#00d9c0',
+    'alert-civil':             '#e75480',
+    'alert-earthquake':        '#ff2020',
+    'alert-dust':              '#b08040',
+    'alert-volcano':           '#cc4400',
+    'alert-tsunami':           '#ff00cc',
+    'alert-avalanche':         '#ffffff',
+    'alert-debris':            '#886633',
+    'alert-ean':               '#ffffff',
+    'alert-blue':              '#1a6eff',
+    'alert-amber':             '#ffdd00',
+    'alert-nuclear':           '#39ff14',
+    'alert-evacuation':        '#ffffff',
+  };
+  return map[cls] || null;
+}
+
+let currentUnit = 'F';
+let wxData = null;
+let currentLat = null, currentLon = null, currentLabel = '—';
+let activePulseColor = null;
+
+function applyPulse() {
+  if (activePulseColor) {
+    let styleEl = document.getElementById('severePulseStyle');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'severePulseStyle';
+      document.head.appendChild(styleEl);
+    }
+    const isLight = resolveTheme() === 'light';
+    const bgBase  = isLight ? '#f2f3f7' : '#0d0d0f';
+    const pct     = isLight ? '10%' : '22%';
+    styleEl.textContent = `@keyframes severePulse {
+      0%,100% { background-color: var(--bg); }
+      50%      { background-color: color-mix(in srgb, ${activePulseColor} ${pct}, ${bgBase}); }
+    }`;
+    document.body.classList.add('severe-warning');
+  } else {
+    document.body.classList.remove('severe-warning');
+  }
+  applyTopGlow();
+}
+
+function renderAlerts(alerts) {
+  const container = document.getElementById('alertList');
+
+  if (!alerts || !alerts.length) {
+    container.innerHTML = '';
+    activePulseColor = null;
+    applyPulse();
+    return;
+  }
+
+  let pulse = null;
+  container.innerHTML = alerts.map(a => {
+    const p   = a.properties;
+    const cls = a._eccc ? ecccAlertClass(p) : alertClass(p.event, p.severity, p.headline, p.description);
+    const displayEvent = getDisplayEvent(p.event, cls);
+    // ECCC's risk_colour_en doubles as the Air Quality Health Index scale, which is a health-risk
+    // rating, not severe-weather urgency — a "red" AQHI reading shouldn't trigger the same
+    // full-screen pulse as a red severe weather warning.
+    const isAirQuality = /air quality|smoke/i.test(p.event || '');
+    if (!pulse && !isAirQuality) pulse = getPulseColorForClass(cls);
+
+    const duration = p.onset && p.expires ? `${fmtTime(p.onset)} – ${fmtTime(p.expires)}`
+                    : p.expires ? `Until ${fmtTime(p.expires)}` : '';
+    const meta  = [duration, p.areaDesc].filter(Boolean).join(' · ');
+    const body  = [p.description, p.instruction].filter(Boolean).join('\n\n');
+
+    return `
+      <div class="alert-banner ${cls}" onclick="toggleAlert(this)">
+        <div class="alert-banner-row">
+          <div class="alert-icon">${alertIcon(p.event)}</div>
+          <div class="alert-body">
+            <div class="alert-title">${escHtml(displayEvent)}</div>
+            <div class="alert-duration">${escHtml(meta)}</div>
+          </div>
+          <div class="alert-arrow">▸</div>
+        </div>
+        <div class="alert-text">${escHtml(body)}</div>
+      </div>`;
+  }).join('');
+
+  activePulseColor = pulse;
+  applyPulse();
+}
+
+let currentTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone; // default to device tz
+
+const toF      = c   => c * 9/5 + 32;
+const fmt      = c   => Math.round(currentUnit === 'F' ? toF(c) : c);
+const uSfx     = ()  => `°${currentUnit}`;
+const fmtWind  = kmh => Math.round(currentUnit === 'F' ? kmh * 0.621371 : kmh);
+
+function uvLabel(uv) {
+  if (uv<=2)  return ['Low','var(--safe)'];
+  if (uv<=5)  return ['Moderate','#ffcc44'];
+  if (uv<=7)  return ['High','#ff8844'];
+  if (uv<=10) return ['Very High','#ff6644'];
+  return ['Extreme','#ff44aa'];
+}
+function windDirLabel(deg) { return ['N','NE','E','SE','S','SW','W','NW'][Math.round(deg/45)%8]; }
+function fmtTime(isoStr) {
+  const d = new Date(isoStr);
+  let h = d.getHours(), m = d.getMinutes().toString().padStart(2,'0');
+  const ap = h>=12?'PM':'AM'; h=((h%12)||12); return `${h}:${m} ${ap}`;
+}
+function fmtHourLabel(isoStr) {
+  const d = new Date(isoStr);
+  const h = d.getHours();
+  if (timeFormat === '24') return `${h.toString().padStart(2,'0')}:00`;
+  const ap = h>=12?'PM':'AM';
+  return `${((h%12)||12)} ${ap}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// API
+// ═══════════════════════════════════════════════════════
+async function fetchNwsAlerts(lat, lon) {
+  if (lat < 15 || lat > 72 || lon < -180 || lon > -60) return [];
+  try {
+    const r = await fetch(`https://api.weather.gov/alerts/active?point=${lat.toFixed(4)},${lon.toFixed(4)}`, {
+      headers: { 'User-Agent': 'SilverSkies/1.0' }
+    });
+    if (!r.ok) return [];
+    const d = await r.json();
+    return d.features || [];
+  } catch { return []; }
+}
+
+// isCanada() is a rough rectangle, not the actual border (it also covers WY, MT, ID, MN, MI, NY, ME,
+// etc.) — so instead of using it to pick ONE api, query whichever apis are plausibly in range and merge.
+// Both NWS and ECCC filter by real alert-zone polygons, so a point outside their actual coverage just
+// comes back empty rather than returning wrong-country data.
+async function fetchAlerts(lat, lon) {
+  const tasks = [fetchNwsAlerts(lat, lon)];
+  if (isCanada(lat, lon)) tasks.push(fetchEcccAlerts(lat, lon));
+  const results = await Promise.all(tasks);
+  return results.flat();
+}
+
+async function fetchWeatherData(lat, lon) {
+  const p = new URLSearchParams({
+    latitude: lat, longitude: lon,
+    current: ['temperature_2m','relative_humidity_2m','apparent_temperature',
+              'weather_code','wind_speed_10m','wind_direction_10m',
+              'precipitation','cloud_cover','uv_index','is_day'].join(','),
+    hourly:  ['temperature_2m','weather_code','precipitation_probability','is_day'].join(','),
+    daily:   ['weather_code','temperature_2m_max','temperature_2m_min',
+              'precipitation_probability_max','sunrise','sunset','uv_index_max'].join(','),
+    timezone:'auto', forecast_days:7,
+  });
+  const r = await fetch(`https://api.open-meteo.com/v1/forecast?${p}`);
+  if (!r.ok) throw new Error(`Open-Meteo error ${r.status}`);
+  return r.json();
+}
+
+
+// Open-Meteo's geocoding API returns full region names in `admin1` (e.g. "Wyoming"), not postal
+// codes — matching a 2-letter code against that field needs the code spelled out first.
+const REGION_NAMES = {
+  AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',CT:'Connecticut',
+  DE:'Delaware',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',IL:'Illinois',IN:'Indiana',IA:'Iowa',
+  KS:'Kansas',KY:'Kentucky',LA:'Louisiana',ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',
+  MN:'Minnesota',MS:'Mississippi',MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',
+  NH:'New Hampshire',NJ:'New Jersey',NM:'New Mexico',NY:'New York',NC:'North Carolina',
+  ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',PA:'Pennsylvania',RI:'Rhode Island',
+  SC:'South Carolina',SD:'South Dakota',TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',
+  VA:'Virginia',WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',DC:'District of Columbia',
+  AB:'Alberta',BC:'British Columbia',MB:'Manitoba',NB:'New Brunswick',
+  NL:'Newfoundland and Labrador',NS:'Nova Scotia',NT:'Northwest Territories',NU:'Nunavut',
+  ON:'Ontario',PE:'Prince Edward Island',QC:'Quebec',SK:'Saskatchewan',YT:'Yukon',
+};
+
+async function geocode(query) {
+  // Strip trailing state/country codes like ", AZ" or ", US" that confuse Open-Meteo
+  const cityOnly = query.replace(/,\s*[A-Za-z]{2}(\s*,.*)?$/, '').trim();
+
+  // Try Open-Meteo first (fast, global)
+  try {
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityOnly)}&count=5&language=en&format=json`);
+    const d = await r.json();
+    if (d.results?.length) {
+      // If original query had a state/province code, prefer the result whose admin1 matches it
+      const stateMatch = query.match(/,\s*([A-Za-z]{2})\b/);
+      const stateCode  = stateMatch?.[1]?.toUpperCase();
+      const regionName = stateCode && REGION_NAMES[stateCode];
+      const loc = regionName
+        ? (d.results.find(r => r.admin1?.toLowerCase() === regionName.toLowerCase()) || d.results[0])
+        : d.results[0];
+      return { lat:loc.latitude, lon:loc.longitude, label:`${loc.name}${loc.admin1?', '+loc.admin1:''}` };
+    }
+  } catch { /* fall through */ }
+
+  // Fall back to Nominatim
+  const r2 = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`, {
+    headers: { 'Accept-Language':'en', 'User-Agent':'SilverSkies/1.0' }
+  });
+  const d2 = await r2.json();
+  if (!d2?.length) throw new Error('Location not found');
+  const loc2 = d2[0];
+  // Build a clean label — deduplicate when city name repeats in admin (e.g. "Melbourne, City of Melbourne")
+  const parts = loc2.display_name.split(',').map(s => s.trim());
+  const city  = parts[0];
+  const admin = parts.find((p, i) => i > 0 && !p.toLowerCase().includes(city.toLowerCase())) || parts[1] || '';
+  const label = admin ? `${city}, ${admin}` : city;
+  return { lat: parseFloat(loc2.lat), lon: parseFloat(loc2.lon), label };
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════
+function renderAll() {
+  if (!wxData) return;
+  const c   = wxData.current;
+  const d   = wxData.daily;
+  const now = new Date();
+  const isDay = c.is_day === 1;
+
+  // Theme first — everything transitions with it
+  applyTheme(c.weather_code, isDay);
+
+  // Favicon
+  document.getElementById('favicon').href = gwIconName(c.weather_code, isDay);
+
+  // Current
+  document.getElementById('currentTemp').textContent = fmt(c.temperature_2m);
+  document.getElementById('unitLabel').textContent   = uSfx();
+  document.getElementById('currentCond').textContent = wmoLabel(c.weather_code);
+  // Large current-conditions icon — always Meteocons.
+  document.getElementById('currentIcon').src = wmoIcon(c.weather_code, isDay);
+  document.getElementById('currentIcon').alt = wmoLabel(c.weather_code);
+
+  // Condensed scroll header — mirrors the current-conditions values above, but always
+  // uses the Google Weather icon set so it visually reads as a distinct, denser header.
+  document.getElementById('condensedLocation').textContent = currentLabel;
+  document.getElementById('condensedTemp').textContent     = fmt(c.temperature_2m);
+  document.getElementById('condensedUnit').textContent     = uSfx();
+  document.getElementById('condensedCond').textContent     = wmoLabel(c.weather_code);
+  document.getElementById('condensedIconGw').innerHTML     = gwIconHtml(c.weather_code, isDay, 'wi-sm');
+
+  document.getElementById('feelsLike').textContent   =
+    `FEELS LIKE ${fmt(c.apparent_temperature)}${uSfx()} · HIGH ${fmt(d.temperature_2m_max[0])}${uSfx()}`;
+
+  // Stats
+  document.getElementById('humidity').textContent = c.relative_humidity_2m;
+  document.getElementById('wind').textContent     = fmtWind(c.wind_speed_10m);
+  document.getElementById('windUnit').textContent = currentUnit==='F'?'mph':'km/h';
+  document.getElementById('windDir').textContent  = windDirLabel(c.wind_direction_10m);
+  document.getElementById('precip').textContent   = c.precipitation.toFixed(1);
+
+  // Hourly
+  const times    = wxData.hourly.time;
+  const hTemps   = wxData.hourly.temperature_2m;
+  const hCodes   = wxData.hourly.weather_code;
+  const hPops    = wxData.hourly.precipitation_probability;
+  const hDayFlag = wxData.hourly.is_day;
+  let cards = [], found = 0;
+  for (let i=0; i<times.length && found<12; i++) {
+    const hd = new Date(times[i]);
+    if (hd < now && hd.getHours() !== now.getHours()) continue;
+    const pop = hPops[i]||0;
+    cards.push(`
+      <div class="hour-card ${found===0?'now':''}">
+        <div class="hour-time">${found===0?'NOW':fmtHourLabel(times[i])}</div>
+        <div class="hour-icon">${wmoPhosphorHtml(hCodes[i],hDayFlag[i]===1,'hour-icon-glyph')}</div>
+        <div class="hour-temp">${fmt(hTemps[i])}${uSfx()}</div>
+        ${pop>0?`<div class="hour-pop">${pop}%</div>`:''}
+      </div>`);
+    found++;
+  }
+  document.getElementById('hourlyRow').innerHTML = cards.join('');
+
+  // Forecast
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const highs = d.temperature_2m_max, lows = d.temperature_2m_min;
+  const minH = Math.min(...highs), maxH = Math.max(...highs);
+  document.getElementById('forecastList').innerHTML = d.time.map((t,i) => {
+    const dt = new Date(t+'T12:00:00');
+    const pop = d.precipitation_probability_max[i]||0;
+    const pct = maxH===minH?50:Math.round((highs[i]-minH)/(maxH-minH)*100);
+    return `
+      <div class="forecast-row ${i===0?'today':''}">
+        <div class="forecast-day">${i===0?'Today':dayNames[dt.getDay()]}</div>
+        <div class="forecast-icon">${wmoPhosphorHtml(d.weather_code[i],true,'forecast-icon-glyph')}</div>
+        <div class="temp-bar-wrap">
+          <div class="temp-bar-bg"><div class="temp-bar-fill" style="width:${pct}%"></div></div>
+          <div class="temp-bar-labels"><span>${fmt(lows[i])}${uSfx()}</span><span></span></div>
+        </div>
+        <div class="forecast-high">${fmt(highs[i])}${uSfx()}</div>
+        <div class="forecast-pop">${pop>0?pop+'%':'—'}</div>
+      </div>`;
+  }).join('');
+
+  // Detail
+  const uv = c.uv_index ?? d.uv_index_max[0] ?? 0;
+  const [uvText, uvColor] = uvLabel(uv);
+  document.getElementById('uvValue').textContent    = uv.toFixed(1);
+  document.getElementById('uvValue').style.color    = uvColor;
+  document.getElementById('uvDesc').textContent     = `${uvText} — ${uv>5?'SPF recommended':'Low risk'}`;
+  document.getElementById('uvMarker').style.left    = Math.min(Math.round(uv/11*100),100)+'%';
+  document.getElementById('apparentTemp').textContent = `${fmt(c.apparent_temperature)}${uSfx()}`;
+  const cc = c.cloud_cover;
+  document.getElementById('cloudCover').textContent = cc+'%';
+  document.getElementById('cloudDesc').textContent  = cc<20?'Clear skies':cc<50?'Partly cloudy':cc<85?'Mostly cloudy':'Overcast';
+
+  // Sun arc
+  const sunrise = new Date(d.sunrise[0]), sunset = new Date(d.sunset[0]);
+  const srStr = fmtTime(d.sunrise[0]), ssStr = fmtTime(d.sunset[0]);
+  document.getElementById('sunriseVal').textContent   = srStr;
+  document.getElementById('sunsetVal').textContent    = ssStr;
+  document.getElementById('sunriseLabel').textContent = srStr;
+  document.getElementById('sunsetLabel').textContent  = ssStr;
+  const totalMs = sunset - sunrise;
+  const elapsed = Math.min(Math.max(now - sunrise, 0), totalMs);
+  const pct = elapsed / totalMs;
+  const dh = Math.floor(totalMs/3600000), dm = Math.floor((totalMs%3600000)/60000);
+  document.getElementById('daylightVal').textContent = `DAYLIGHT · ${dh}h ${dm}m`;
+  document.getElementById('sunArcProgress').setAttribute('stroke-dashoffset', 390 - pct*390);
+  const tv=pct, P0=[10,100], P1=[150,-10], P2=[290,100];
+  const cx=(1-tv)*(1-tv)*P0[0]+2*(1-tv)*tv*P1[0]+tv*tv*P2[0];
+  const cy=(1-tv)*(1-tv)*P0[1]+2*(1-tv)*tv*P1[1]+tv*tv*P2[1];
+  document.getElementById('sunDot').setAttribute('cx',cx);
+  document.getElementById('sunDot').setAttribute('cy',cy);
+  document.getElementById('sunDotHalo').setAttribute('cx',cx);
+  document.getElementById('sunDotHalo').setAttribute('cy',cy);
+}
+
+// ═══════════════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════════════
+function updateClock() {
+  const now = new Date();
+  const DAYS=['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  const MONS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const use24 = timeFormat === '24';
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: currentTimezone,
+      weekday:'short', day:'numeric', month:'short', year:'numeric',
+      hour:'numeric', minute:'2-digit', hour12: !use24
+    }).formatToParts(now);
+    const get = (t) => parts.find(p => p.type === t)?.value ?? '';
+    const day  = get('weekday').toUpperCase();
+    const date = get('day');
+    const mon  = get('month').toUpperCase();
+    const yr   = get('year');
+    const h    = get('hour').padStart(2,'0');
+    const m    = get('minute');
+    const ap   = use24 ? '' : ` ${get('dayPeriod').toUpperCase()}`;
+    document.getElementById('clockDisplay').textContent = `${day} ${date} ${mon} ${yr} — ${h}:${m}${ap}`;
+  } catch {
+    // Fallback to device time if timezone string is invalid
+    const h24 = now.getHours();
+    const m = now.getMinutes().toString().padStart(2,'0');
+    let timeStr;
+    if (use24) {
+      timeStr = `${h24.toString().padStart(2,'0')}:${m}`;
+    } else {
+      const ap = h24>=12?'PM':'AM';
+      const h12 = ((h24%12)||12).toString().padStart(2,'0');
+      timeStr = `${h12}:${m} ${ap}`;
+    }
+    document.getElementById('clockDisplay').textContent =
+      `${DAYS[now.getDay()]} ${now.getDate()} ${MONS[now.getMonth()]} ${now.getFullYear()} — ${timeStr}`;
+  }
+}
+function stampRefresh() {
+  const now = new Date();
+  const use24 = timeFormat === '24';
+  const h24 = now.getHours();
+  const m = now.getMinutes().toString().padStart(2,'0');
+  const timeStr = use24
+    ? `${h24.toString().padStart(2,'0')}:${m}`
+    : `${((h24%12)||12).toString().padStart(2,'0')}:${m} ${h24>=12?'PM':'AM'}`;
+  document.getElementById('lastRefresh').textContent = timeStr;
+}
+
+// ═══════════════════════════════════════════════════════
+// UNIT TOGGLE
+// ═══════════════════════════════════════════════════════
+function setUnit(u) {
+  currentUnit = u;
+  ['btnF','btnF2'].forEach(id => { const el=document.getElementById(id); if(el) el.classList.toggle('active', u==='F'); });
+  ['btnC','btnC2'].forEach(id => { const el=document.getElementById(id); if(el) el.classList.toggle('active', u==='C'); });
+  renderAll();
+}
+
+// ═══════════════════════════════════════════════════════
+// LOAD
+// ═══════════════════════════════════════════════════════
+
+async function loadWeather(lat, lon, label) {
+  lat = lat ?? currentLat; lon = lon ?? currentLon;
+  if (lat === null) return;
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  document.getElementById('errorBox').style.display = 'none';
+  try {
+    // Fetch weather + alerts in parallel
+    const [wx, alerts] = await Promise.all([
+      fetchWeatherData(lat, lon),
+      fetchAlerts(lat, lon),
+    ]);
+    wxData = wx;
+    currentTimezone = wx.timezone || currentTimezone;
+    currentLat = lat; currentLon = lon;
+    if (label) {
+      currentLabel = label;
+      document.getElementById('locationTitle').textContent = label;
+      document.getElementById('locationSub').textContent =
+        `${Math.abs(lat).toFixed(2)}°${lat<0?'S':'N'}  ${Math.abs(lon).toFixed(2)}°${lon<0?'W':'E'}`;
+    }
+    renderAll();
+    demoAlerts = [];
+    lastRealAlerts = alerts;
+    renderAlerts(alerts);
+    stampRefresh();
+    document.getElementById('loadingOverlay').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
+  } catch(e) {
+    document.getElementById('errorBox').textContent = `⚠ ${e.message}`;
+    document.getElementById('errorBox').style.display = 'block';
+    document.getElementById('loadingOverlay').style.display = 'none';
+    if (wxData) document.getElementById('mainContent').style.display = 'block';
+  } finally {
+    btn.classList.remove('spinning');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SEARCH
+// ═══════════════════════════════════════════════════════
+async function handleSearch() {
+  const val = document.getElementById('searchInput').value.trim();
+  if (!val) return;
+  const btn = document.getElementById('searchBtn');
+  btn.textContent = 'SEARCHING…'; btn.disabled = true;
+  document.getElementById('geoNotice').style.display = 'none';
+  try {
+    const { lat, lon, label } = await geocode(val);
+    await loadWeather(lat, lon, label);
+    document.getElementById('searchInput').value = '';
+  } catch(e) {
+    document.getElementById('errorBox').textContent = `⚠ ${e.message}`;
+    document.getElementById('errorBox').style.display = 'block';
+  } finally {
+    btn.textContent = 'SEARCH'; btn.disabled = false;
+  }
+}
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key==='Enter') handleSearch();
+});
+
+// ═══════════════════════════════════════════════════════
+// GEOLOCATION
+// ═══════════════════════════════════════════════════════
+function setLoading(msg) {
+  document.getElementById('loadingText').textContent = msg;
+  document.getElementById('loadingOverlay').style.display = 'block';
+}
+
+async function reverseGeocode(lat, lon) {
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=10`,
+      { headers: { 'Accept-Language': 'en', 'User-Agent': 'SilverSkies/1.0' } }
+    );
+    if (!r.ok) throw new Error('Nominatim error');
+    const d = await r.json();
+    const a = d.address || {};
+    // Prefer city > town > village > county, append state if US
+    const city  = a.city || a.town || a.village || a.municipality || a.county || '';
+    const state = a.state_code || a.state || '';
+    if (city && state) return `${city}, ${state}`;
+    if (city) return city;
+    return `${Math.abs(lat).toFixed(2)}°${lat<0?'S':'N'}`;
+  } catch {
+    return `${Math.abs(lat).toFixed(2)}°${lat<0?'S':'N'}`;
+  }
+}
+
+function initGeolocation(fromButton = false) {
+  const gpsBtn = document.getElementById('gpsBtn');
+  if (gpsBtn) gpsBtn.classList.add('locating');
+
+  if (!navigator.geolocation) {
+    if (gpsBtn) gpsBtn.classList.remove('locating');
+    if (!fromButton) { setLoading('No geolocation — using default'); loadWeather(32.834, -109.7076, 'Safford, AZ'); }
+    else { document.getElementById('errorBox').textContent = '⚠ Geolocation not supported by this browser'; document.getElementById('errorBox').style.display = 'block'; }
+    return;
+  }
+
+  // On first load show full overlay; on button press just spin the button
+  if (!fromButton) setLoading('Requesting location…');
+
+  navigator.geolocation.getCurrentPosition(
+    async pos => {
+      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+      currentLat = lat; currentLon = lon;
+      if (!fromButton) setLoading('Fetching weather…');
+      try {
+        const [wx, alerts, label] = await Promise.all([
+          fetchWeatherData(lat, lon),
+          fetchAlerts(lat, lon),
+          reverseGeocode(lat, lon),
+        ]);
+        wxData = wx;
+        currentTimezone = wx.timezone || currentTimezone;
+        currentLabel = label;
+        document.getElementById('locationTitle').textContent = label;
+        document.getElementById('locationSub').textContent =
+          `${Math.abs(lat).toFixed(2)}°${lat<0?'S':'N'}  ${Math.abs(lon).toFixed(2)}°${lon<0?'W':'E'}`;
+        renderAll();
+        demoAlerts = [];
+        lastRealAlerts = alerts;
+        renderAlerts(alerts);
+        stampRefresh();
+        document.getElementById('loadingOverlay').style.display = 'none';
+        document.getElementById('mainContent').style.display   = 'block';
+        document.getElementById('geoNotice').style.display     = 'flex';
+        requestAnimationFrame(initSpecular);
+      } catch(e) {
+        document.getElementById('errorBox').textContent = `⚠ ${e.message}`;
+        document.getElementById('errorBox').style.display = 'block';
+        document.getElementById('loadingOverlay').style.display = 'none';
+        document.getElementById('mainContent').style.display = 'block';
+      } finally {
+        if (gpsBtn) gpsBtn.classList.remove('locating');
+      }
+    },
+    err => {
+      if (gpsBtn) gpsBtn.classList.remove('locating');
+      const msg = err.code === 1 ? 'Location access denied' : 'Location unavailable';
+      document.getElementById('errorBox').textContent = `⚠ ${msg}`;
+      document.getElementById('errorBox').style.display = 'block';
+      if (!fromButton) loadWeather(32.834, -109.7076, 'Safford, AZ');
+    },
+    { timeout: 10000, maximumAge: fromButton ? 0 : 300000 }
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// DEMO ALERTS
+// ═══════════════════════════════════════════════════════
+let demoAlerts = [];
+let lastRealAlerts = [];
+
+function addDemoAlert() {
+  const val = document.getElementById('demoAlertSelect').value;
+  const [event, severity] = val.split('|');
+
+  // 🌑 Easter egg — Asteroid Impact Warning
+  if (event === '__ASTEROID__') { triggerAsteroid(); return; }
+
+  const now = new Date();
+  const end = new Date(now.getTime() + 6 * 3600000);
+  demoAlerts.push({
+    properties: {
+      event,
+      severity,
+      headline: `${event} in effect`,
+      description: `This is a demo alert for testing the Silver Skies alert display. Event: ${event}. Severity: ${severity}.`,
+      instruction: 'This is a simulated alert for UI testing purposes only.',
+      onset: now.toISOString(),
+      expires: end.toISOString(),
+      areaDesc: 'Demo County, Test State',
+    }
+  });
+  renderAlerts([...lastRealAlerts, ...demoAlerts]);
+}
+
+let asteroidTimer = null;
+function triggerAsteroid() {
+  if (asteroidTimer) return;
+
+  const now = new Date();
+  const impactTime = new Date(now.getTime() + 60000);
+  const fakeAlert = {
+    properties: {
+      event: 'Asteroid Impact Warning',
+      severity: 'Extreme',
+      headline: 'ASTEROID IMPACT IMMINENT — SEEK SHELTER IMMEDIATELY',
+      description: 'THE NATIONAL EMERGENCY ALERT SYSTEM HAS CONFIRMED THAT A NEAR-EARTH OBJECT OF CATASTROPHIC SIZE IS ON A COLLISION COURSE WITH EARTH. IMPACT IS PROJECTED IN APPROXIMATELY 60 SECONDS.\n\nTHIS IS NOT A TEST. THIS IS NOT A DRILL.\n\nCIVIL AUTHORITIES URGE ALL CITIZENS TO CEASE NORMAL ACTIVITIES IMMEDIATELY. THERE IS NO SHELTER THAT CAN GUARANTEE SURVIVAL FROM A DIRECT IMPACT EVENT OF THIS MAGNITUDE.\n\nWE ASK THAT YOU SPEND THESE FINAL MOMENTS WITH THE PEOPLE YOU LOVE. CALL SOMEONE. HOLD SOMEONE. TELL THEM WHAT THEY MEAN TO YOU.\n\nWE ARE GRATEFUL FOR EVERY MOMENT WE HAVE HAD ON THIS BEAUTIFUL PLANET. GODSPEED TO YOU ALL.\n\n— National Emergency Coordination Center',
+      instruction: 'Locate loved ones. Make peace. 🌍',
+      onset: now.toISOString(),
+      expires: impactTime.toISOString(),
+      areaDesc: 'The Entire Earth',
+    }
+  };
+
+  renderAlerts([fakeAlert]);
+  activePulseColor = '#ff2200';
+  applyPulse();
+  document.body.classList.add('asteroid-shaking');
+
+  const countdownEl = document.getElementById('asteroidCountdown');
+  countdownEl.style.display = 'block';
+  let secondsLeft = 60;
+  countdownEl.textContent = '\u2604 IMPACT IN ' + secondsLeft + 'S';
+
+  const tick = setInterval(() => {
+    secondsLeft--;
+    countdownEl.textContent = '\u2604 IMPACT IN ' + secondsLeft + 'S';
+    if (secondsLeft <= 10) {
+      document.body.style.animationDuration = '0.15s';
+      if (navigator.vibrate) navigator.vibrate([80, 40]);
+    } else if (secondsLeft <= 30) {
+      document.body.style.animationDuration = '0.25s';
+      if (secondsLeft % 2 === 0 && navigator.vibrate) navigator.vibrate([40, 60]);
+    } else if (secondsLeft % 5 === 0 && navigator.vibrate) {
+      navigator.vibrate(20);
+    }
+    if (secondsLeft <= 0) { clearInterval(tick); detonateAsteroid(); }
+  }, 1000);
+
+  asteroidTimer = tick;
+}
+
+function detonateAsteroid() {
+  document.body.classList.remove('asteroid-shaking');
+  document.body.style.animationDuration = '';
+  document.getElementById('asteroidCountdown').style.display = 'none';
+  document.body.classList.add('exploding');
+
+  // Vibrate aggressively on impact — long burst, then rapid pulses, then silence
+  if (navigator.vibrate) {
+    navigator.vibrate([
+      500, 50, 300, 50, 200, 50, 500, 30, 100, 30,
+      100, 30, 100, 30, 100, 30, 100, 30, 800
+    ]);
+  }
+
+  setTimeout(() => {
+    asteroidTimer = null;
+    document.body.classList.remove('exploding');
+    document.body.style = '';
+    demoAlerts = [];
+    activePulseColor = null;
+    applyPulse();
+    renderAlerts(lastRealAlerts);
+    if (currentLat !== null) loadWeather(currentLat, currentLon, currentLabel);
+  }, 1400);
+}
+
+function clearDemoAlerts() {
+  demoAlerts = [];
+  renderAlerts(lastRealAlerts);
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+updateClock();
+setInterval(updateClock, 1000);
+
+// ── Condensed scroll header ─────────────────────────────
+// Shown once the Current Conditions section scrolls out of view above the viewport,
+// hidden again once it's back in view. IntersectionObserver keeps this off the main
+// thread (no scroll-event polling) and correctly reports "not intersecting" while
+// #mainContent is still display:none during the initial load.
+(() => {
+  const condensedBar = document.getElementById('condensedBar');
+  const target = document.querySelector('.current-grid');
+  if (!condensedBar || !target) return;
+  new IntersectionObserver(
+    ([entry]) => {
+      condensedBar.classList.toggle('visible', !entry.isIntersecting && entry.boundingClientRect.top < 0);
+    },
+    { threshold: 0 }
+  ).observe(target);
+})();
+
+// ── Cursor-tracking specular highlight ─────────────────
+function initSpecular() {
+  const cards = document.querySelectorAll('.stat-card, .hour-card, .forecast-row, .info-card, .sun-card');
+  cards.forEach(card => {
+    if (card.querySelector('.specular')) return;
+    const spec = document.createElement('div');
+    spec.className = 'specular';
+    card.appendChild(spec);
+    card.addEventListener('mousemove', e => {
+      const r = card.getBoundingClientRect();
+      const x = ((e.clientX - r.left) / r.width)  * 100;
+      const y = ((e.clientY - r.top)  / r.height) * 100;
+      spec.style.background = `radial-gradient(circle at ${x}% ${y}%, rgba(255,255,255,0.12) 0%, transparent 60%)`;
+    });
+    card.addEventListener('mouseleave', () => {
+      spec.style.background = '';
+    });
+  });
+}
+
+
+// ═══════════════════════════════════════════════════════
+// AUTO-REFRESH
+// ═══════════════════════════════════════════════════════
+let autoRefreshInterval = null;
+let autoRefreshMinutes = parseInt(localStorage.getItem('ss-autorefresh') ?? '30');
+
+function setAutoRefresh(minutes) {
+  autoRefreshMinutes = minutes;
+  localStorage.setItem('ss-autorefresh', minutes);
+  // Sync buttons
+  [5, 15, 30, 60, 120, 0].forEach(m => {
+    const btn = document.getElementById(`refreshBtn-${m}`);
+    if (btn) btn.classList.toggle('active', m === minutes);
+  });
+  // Clear existing interval
+  if (autoRefreshInterval) { clearInterval(autoRefreshInterval); autoRefreshInterval = null; }
+  // Set new interval if not OFF
+  if (minutes > 0) {
+    autoRefreshInterval = setInterval(() => loadWeather(), minutes * 60 * 1000);
+  }
+}
+
+// Init auto-refresh on load
+setAutoRefresh(autoRefreshMinutes);
+
+
+initGeolocation();
+</script>
+</body>
+</html>
