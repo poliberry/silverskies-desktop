@@ -13,37 +13,31 @@ on:
 permissions:
   contents: write # electron-builder needs this to create the release and upload assets
 
-jobs:
-  # electron-builder determines the release to publish to from package.json's
-  # "version", not from whatever git ref triggered the run — so re-running
-  # this workflow (workflow_dispatch, or a retried job) for the same version
-  # targets the *same* release the previous attempt already uploaded assets
-  # to. electron-builder does try to overwrite existing assets, but that's
-  # been flaky for at least one file per run (a 422 "already_exists" on a
-  # .blockmap that a previous attempt had already published) — deleting any
-  # existing release for this version up front, once, before the matrix
-  # fans out, means every build starts from a guaranteed-clean release
-  # instead of relying on that overwrite path at all.
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.version.outputs.tag }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Read version from package.json
-        id: version
-        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-      - name: Delete existing release for this version, if any
-        run: gh release delete "${{ steps.version.outputs.tag }}" --yes --cleanup-tag=false || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+# electron-builder publishes to whatever release matches package.json's
+# version, regardless of which ref triggered the run — so two overlapping
+# runs for the *same* version (a manual re-trigger while one's still
+# building, say) would race on that one release. Serialize instead of
+# canceling: a build already in flight should finish, not get yanked mid
+# platform-matrix.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
+jobs:
   build:
-    needs: prepare
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            # Matches this platform's installer/portable exe, its
+            # blockmap, and the differential-update metadata electron-
+            # updater reads on Windows — never anything mac/Linux produce.
+            assetPattern: "\\.exe(\\.blockmap)?$|^latest\\.yml$"
+          - os: macos-latest
+            assetPattern: "\\.(dmg|zip)(\\.blockmap)?$|^latest-mac\\.yml$"
+          - os: ubuntu-latest
+            assetPattern: "\\.(AppImage|deb)(\\.blockmap)?$|^latest-linux\\.yml$"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +45,53 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      # electron-builder does try to overwrite an existing release asset on
+      # a re-run, but that's been flaky (a mac .blockmap 422'd with
+      # "already_exists" instead of being replaced) — so before building,
+      # each job removes only *its own platform's* assets (by name pattern)
+      # from any release already published for this version. Scoped to one
+      # platform's filenames so the three matrix jobs never touch each
+      # other's assets, and it lives in every job (not a separate "prepare"
+      # job the matrix depends on) specifically because GitHub's "Re-run
+      # failed jobs" skips already-succeeded jobs — a `needs:`-gated
+      # one-time cleanup wouldn't run again on that kind of retry, and the
+      # whole point here is that retries need to stay safe.
+      - name: Remove this platform's stale release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v$(node -p "require('./package.json').version")"
+          echo "Checking for an existing '$TAG' release..."
+
+          if ! ASSETS_JSON=$(gh release view "$TAG" --json assets 2>err.log); then
+            if grep -qi "release not found" err.log; then
+              echo "No existing release for $TAG yet — nothing to clean up."
+              exit 0
+            fi
+            echo "::error::Failed to look up the '$TAG' release:"
+            cat err.log
+            exit 1
+          fi
+
+          STALE=$(echo "$ASSETS_JSON" | node -e '
+            const data = JSON.parse(require("fs").readFileSync(0, "utf8"));
+            const pattern = new RegExp(process.env.ASSET_PATTERN);
+            for (const a of data.assets) if (pattern.test(a.name)) console.log(a.name);
+          ')
+
+          if [ -z "$STALE" ]; then
+            echo "No stale assets matching this platform for $TAG."
+            exit 0
+          fi
+
+          echo "$STALE" | while IFS= read -r name; do
+            echo "Deleting stale asset from a previous attempt: $name"
+            gh release delete-asset "$TAG" "$name" --yes
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_PATTERN: ${{ matrix.assetPattern }}
 
       # AppImage's build step (not just running one) needs libfuse2 on
       # modern Ubuntu runners, which dropped it from the base image.
