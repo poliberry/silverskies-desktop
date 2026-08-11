@@ -33,8 +33,18 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libfuse2
 
-      - name: Install dependencies
+      # Root and renderer installs run as two separate, sequential steps —
+      # not root's postinstall spawning renderer's install as a nested
+      # child process. On windows-latest that nesting reliably hit EPERM
+      # errors cleaning up node_modules (Windows Defender holding a lock on
+      # files a still-running parent npm process was also touching); giving
+      # each npm process its own step means the first fully exits, releasing
+      # every handle, before the second one starts.
+      - name: Install root dependencies
         run: npm install
+
+      - name: Install renderer dependencies
+        run: npm run install:renderer
 
       - name: Build and publish
         run: npm run dist:publish
