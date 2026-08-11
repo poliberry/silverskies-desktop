@@ -14,7 +14,32 @@ permissions:
   contents: write # electron-builder needs this to create the release and upload assets
 
 jobs:
+  # electron-builder determines the release to publish to from package.json's
+  # "version", not from whatever git ref triggered the run — so re-running
+  # this workflow (workflow_dispatch, or a retried job) for the same version
+  # targets the *same* release the previous attempt already uploaded assets
+  # to. electron-builder does try to overwrite existing assets, but that's
+  # been flaky for at least one file per run (a 422 "already_exists" on a
+  # .blockmap that a previous attempt had already published) — deleting any
+  # existing release for this version up front, once, before the matrix
+  # fans out, means every build starts from a guaranteed-clean release
+  # instead of relying on that overwrite path at all.
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version from package.json
+        id: version
+        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Delete existing release for this version, if any
+        run: gh release delete "${{ steps.version.outputs.tag }}" --yes --cleanup-tag=false || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
