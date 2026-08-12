@@ -84,7 +84,8 @@
       {
         "provider": "github",
         "owner": "poliberry",
-        "repo": "silverskies-desktop"
+        "repo": "silverskies-desktop",
+        "releaseType": "release"
       }
     ]
   }
