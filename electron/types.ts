@@ -74,6 +74,11 @@ export interface SessionWindowEntry {
   instanceId?: string;
   /** For a "conditions" window, the radar instanceId whose location it tracks. */
   pairedInstanceId?: string;
+  /** True for the one radar window (if any) that undocked the *main*
+   * window's own radar — restored as the tracked "primary popout" on
+   * relaunch so Shell knows to stay undocked instead of resetting to
+   * docked on the next launch/refresh. */
+  isPrimaryPopout?: boolean;
   location?: WindowLocation | null;
   bounds?: WindowBoundsRect;
 }

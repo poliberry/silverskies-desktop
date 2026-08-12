@@ -43,6 +43,14 @@ export interface SilverSkiesApi {
     sendInstanceLocation(instanceId: string, location: WindowLocation): void;
     onInstanceLocation(callback: (location: WindowLocation) => void): () => void;
     onPrimaryRadarClosed(callback: () => void): () => void;
+    isPrimaryRadarOpen(): Promise<boolean>;
+  };
+  windowControls: {
+    minimize(): Promise<void>;
+    toggleMaximize(): Promise<void>;
+    close(): Promise<void>;
+    isMaximized(): Promise<boolean>;
+    onMaximizeChanged(callback: (isMaximized: boolean) => void): () => void;
   };
 }
 

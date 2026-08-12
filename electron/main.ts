@@ -152,6 +152,12 @@ function createAppWindow(opts: CreateAppWindowOptions): BrowserWindow {
     minHeight: defaults.minHeight,
     backgroundColor: "#0d0d0f", // matches --bg, avoids a white flash on load
     autoHideMenuBar: true,
+    // Every window draws its own titlebar (drag region + minimize/maximize/
+    // close, via the windowControls:* IPC below) instead of the OS chrome —
+    // `thickFrame` (Windows-only, defaults true) keeps the native resizable
+    // border/shadow/Aero-Snap behavior even though the title bar itself is
+    // custom-drawn.
+    frame: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -194,6 +200,13 @@ function createAppWindow(opts: CreateAppWindowOptions): BrowserWindow {
   win.on("moved", scheduleSessionSave);
   win.on("resized", scheduleSessionSave);
 
+  // Keeps each window's own custom maximize/restore icon in sync — not just
+  // with its own titlebar button, but with OS-level maximize gestures the
+  // custom drag region still honors (double-click, Aero Snap to the top).
+  const sendMaximizeState = () => win.webContents.send("windowControls:maximizeChanged", win.isMaximized());
+  win.on("maximize", sendMaximizeState);
+  win.on("unmaximize", sendMaximizeState);
+
   win.on("closed", () => {
     windows.delete(win.id);
     if (win.id === primaryPopoutWindowId) {
@@ -228,6 +241,7 @@ function scheduleSessionSave() {
         role: tracked.role,
         instanceId: tracked.instanceId,
         pairedInstanceId: tracked.pairedInstanceId,
+        isPrimaryPopout: tracked.win.id === primaryPopoutWindowId,
         location: tracked.location ?? null,
         bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
       });
@@ -247,6 +261,29 @@ function registerUserAgentHeader() {
       details.requestHeaders["User-Agent"] =
         "SilverSkies/1.0 (desktop app; https://github.com/REPLACE_WITH_GITHUB_OWNER/silverskies-desktop)";
       callback({ requestHeaders: details.requestHeaders });
+    },
+  );
+}
+
+/** WillyWeather's API has no `Access-Control-Allow-Origin` header, so a
+ * direct `fetch()` from the renderer (an `app://`/`http://localhost` origin,
+ * same as any browser tab) is blocked by CORS even though the request
+ * itself succeeds. Electron's renderer is still Chromium, so it enforces
+ * CORS the same way a browser tab would — this patches the *response*
+ * headers for just that host so the browser-side fetch is allowed to read
+ * the result, the same trick used for LibreWXR/NWS/etc. isn't needed
+ * (those already send permissive CORS headers). */
+function registerCorsWorkarounds() {
+  const corsHosts = ["api.willyweather.com.au"];
+  session.defaultSession.webRequest.onHeadersReceived(
+    { urls: corsHosts.map((h) => `https://${h}/*`) },
+    (details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          "Access-Control-Allow-Origin": ["*"],
+        },
+      });
     },
   );
 }
@@ -341,6 +378,31 @@ function registerIpcHandlers() {
   });
 }
 
+/** Every window is frameless (see createAppWindow) and draws its own
+ * titlebar — these are the generic minimize/maximize/close primitives
+ * behind it, scoped to whichever window actually sent the request rather
+ * than a specific one, so the exact same renderer component
+ * (WindowControlButtons) works identically in the main window's TopBar and
+ * every radar/conditions/alert pop-out's own toolbar. */
+function registerWindowControlHandlers() {
+  ipcMain.handle("windowControls:minimize", (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
+  });
+
+  ipcMain.handle("windowControls:toggleMaximize", (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  });
+
+  ipcMain.handle("windowControls:close", (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+  });
+
+  ipcMain.handle("windowControls:isMaximized", (event) => BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false);
+}
+
 function registerWindowIpcHandlers() {
   ipcMain.handle(
     "windows:openRadar",
@@ -396,9 +458,13 @@ function registerWindowIpcHandlers() {
   });
 
   ipcMain.handle("windows:getAlertPayload", (_event, token: string) => {
-    const payload = pendingAlertPayloads.get(token) ?? null;
-    pendingAlertPayloads.delete(token);
-    return payload;
+    // Deliberately *not* deleted on read: React's dev-mode double-invoked
+    // effects (and a user simply reloading the alert window) mean this can
+    // legitimately be called more than once for the same token. The 5-minute
+    // timeout above is the only cleanup — a delete-on-read here previously
+    // made the second read (or a reload) report a perfectly valid alert as
+    // "no longer available".
+    return pendingAlertPayloads.get(token) ?? null;
   });
 
   // Fire-and-forget: a radar window announces its own active location
@@ -419,6 +485,12 @@ function registerWindowIpcHandlers() {
     }
     scheduleSessionSave();
   });
+
+  // Lets Shell initialize its "is my radar undocked?" state correctly on
+  // mount instead of assuming false — the main window's own React state
+  // resets on a reload/relaunch, but the actual pop-out window (tracked
+  // here in the registry) doesn't, so this is the source of truth.
+  ipcMain.handle("windows:isPrimaryRadarOpen", () => primaryPopoutWindowId !== null);
 }
 
 // The renderer only hears about *future* status changes once it subscribes
@@ -476,9 +548,11 @@ if (process.platform === "win32") {
 
 app.whenReady().then(async () => {
   registerUserAgentHeader();
+  registerCorsWorkarounds();
   registerIpcHandlers();
   registerUpdaterHandlers();
   registerWindowIpcHandlers();
+  registerWindowControlHandlers();
 
   const [config, savedSession] = await Promise.all([configStore.read(), sessionStore.read()]);
 
@@ -492,13 +566,19 @@ app.whenReady().then(async () => {
   if (config.uiMode === "advanced") {
     for (const entry of savedSession.windows) {
       if (entry.role === "main" || entry.role === "alert") continue;
-      createAppWindow({
+      const win = createAppWindow({
         role: entry.role,
         instanceId: entry.instanceId,
         pairedInstanceId: entry.pairedInstanceId,
         location: entry.location ?? null,
         bounds: entry.bounds,
       });
+      // Restores the "undocked" relationship too, not just the window
+      // itself — otherwise a relaunch (or the main window merely reloading,
+      // which re-mounts Shell with fresh React state) would show the main
+      // window's radar as docked again even though its pop-out is still/
+      // already open. See windows:isPrimaryRadarOpen below.
+      if (entry.isPrimaryPopout) primaryPopoutWindowId = win.id;
     }
   }
 

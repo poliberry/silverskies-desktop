@@ -79,6 +79,25 @@ const api = {
       ipcRenderer.on("windows:primaryRadarClosed", listener);
       return () => ipcRenderer.removeListener("windows:primaryRadarClosed", listener);
     },
+    // Lets a freshly (re)mounted Shell learn whether its radar is already
+    // undocked (a pop-out window survived a main-window reload, or was
+    // restored from session.json on relaunch) instead of assuming docked.
+    isPrimaryRadarOpen: (): Promise<boolean> => ipcRenderer.invoke("windows:isPrimaryRadarOpen"),
+  },
+  // Every window is frameless and draws its own titlebar (drag region +
+  // these three buttons) — see WindowControlButtons.tsx on the renderer
+  // side. Scoped to "whichever window made this call" in main.ts, so the
+  // same calls work from the main window's TopBar or any pop-out's toolbar.
+  windowControls: {
+    minimize: (): Promise<void> => ipcRenderer.invoke("windowControls:minimize"),
+    toggleMaximize: (): Promise<void> => ipcRenderer.invoke("windowControls:toggleMaximize"),
+    close: (): Promise<void> => ipcRenderer.invoke("windowControls:close"),
+    isMaximized: (): Promise<boolean> => ipcRenderer.invoke("windowControls:isMaximized"),
+    onMaximizeChanged: (callback: (isMaximized: boolean) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, isMaximized: boolean) => callback(isMaximized);
+      ipcRenderer.on("windowControls:maximizeChanged", listener);
+      return () => ipcRenderer.removeListener("windowControls:maximizeChanged", listener);
+    },
   },
 };
 

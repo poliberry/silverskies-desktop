@@ -157,5 +157,31 @@ export const ipc = {
       if (!window.silverSkies) return () => {};
       return window.silverSkies.windows.onPrimaryRadarClosed(callback);
     },
+    async isPrimaryRadarOpen(): Promise<boolean> {
+      if (!window.silverSkies) return false;
+      return window.silverSkies.windows.isPrimaryRadarOpen();
+    },
+  },
+  windowControls: {
+    async minimize(): Promise<void> {
+      if (!window.silverSkies) return;
+      return window.silverSkies.windowControls.minimize();
+    },
+    async toggleMaximize(): Promise<void> {
+      if (!window.silverSkies) return;
+      return window.silverSkies.windowControls.toggleMaximize();
+    },
+    async close(): Promise<void> {
+      if (!window.silverSkies) return;
+      return window.silverSkies.windowControls.close();
+    },
+    async isMaximized(): Promise<boolean> {
+      if (!window.silverSkies) return false;
+      return window.silverSkies.windowControls.isMaximized();
+    },
+    onMaximizeChanged(callback: (isMaximized: boolean) => void): () => void {
+      if (!window.silverSkies) return () => {};
+      return window.silverSkies.windowControls.onMaximizeChanged(callback);
+    },
   },
 };
