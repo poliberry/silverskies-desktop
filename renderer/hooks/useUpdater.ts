@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ipc } from "@/lib/ipc-client";
 import type { UpdaterStatus } from "@/types/updater";
 
@@ -10,8 +10,23 @@ import type { UpdaterStatus } from "@/types/updater";
  * hook may already see a non-idle status the moment it mounts. */
 export function useUpdater() {
   const [status, setStatus] = useState<UpdaterStatus>({ state: "idle" });
+  const gotLiveStatusRef = useRef(false);
 
-  useEffect(() => ipc.updater.onStatus(setStatus), []);
+  useEffect(() => {
+    const unsubscribe = ipc.updater.onStatus((s) => {
+      gotLiveStatusRef.current = true;
+      setStatus(s);
+    });
+    // The subscription above only sees *future* events — an update can
+    // finish downloading (or fail, or already be ready to install) entirely
+    // while this component wasn't mounted, so replay whatever main already
+    // knows. Guarded so a live event that arrives first (or while this is
+    // in flight) isn't clobbered by a now-stale snapshot.
+    void ipc.updater.getStatus().then((s) => {
+      if (!gotLiveStatusRef.current) setStatus(s);
+    });
+    return unsubscribe;
+  }, []);
 
   const check = useCallback(() => {
     setStatus({ state: "checking" });

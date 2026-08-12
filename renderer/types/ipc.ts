@@ -26,6 +26,7 @@ export interface SilverSkiesApi {
   updater: {
     check(): Promise<void>;
     install(): Promise<void>;
+    getStatus(): Promise<UpdaterStatus>;
     onStatus(callback: (status: UpdaterStatus) => void): () => void;
   };
 }

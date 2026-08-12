@@ -188,7 +188,15 @@ function registerIpcHandlers() {
   });
 }
 
+// The renderer only hears about *future* status changes once it subscribes
+// (see updater:getStatus below) — an update can finish downloading, for
+// instance, entirely while the About tab isn't mounted (or before it's ever
+// been opened at all), and without this cache reopening it would show
+// "idle" forever instead of "Restart & Install".
+let lastUpdaterStatus: UpdaterStatus = { state: "idle" };
+
 function sendUpdaterStatus(status: UpdaterStatus) {
+  lastUpdaterStatus = status;
   mainWindow?.webContents.send("updater:status", status);
 }
 
@@ -197,6 +205,8 @@ function sendUpdaterStatus(status: UpdaterStatus) {
  * call at startup below — that one only ever surfaces a native OS
  * notification, nothing the UI itself can react to. */
 function registerUpdaterHandlers() {
+  ipcMain.handle("updater:getStatus", () => lastUpdaterStatus);
+
   autoUpdater.on("checking-for-update", () => sendUpdaterStatus({ state: "checking" }));
   autoUpdater.on("update-available", (info) => sendUpdaterStatus({ state: "available", version: info.version }));
   autoUpdater.on("update-not-available", () => sendUpdaterStatus({ state: "not-available" }));

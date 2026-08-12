@@ -105,6 +105,10 @@ export const ipc = {
       if (!window.silverSkies) { warnNoBridge(); return; }
       return window.silverSkies.updater.install();
     },
+    async getStatus(): Promise<UpdaterStatus> {
+      if (!window.silverSkies) return { state: "unsupported" };
+      return window.silverSkies.updater.getStatus();
+    },
     onStatus(callback: (status: UpdaterStatus) => void): () => void {
       if (!window.silverSkies) {
         // Browser-preview fallback — updates only ever exist in a packaged
