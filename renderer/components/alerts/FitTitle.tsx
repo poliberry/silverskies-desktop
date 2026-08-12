@@ -86,6 +86,11 @@ export function FitTitle({ text, color, fontSizePx = 34 }: FitTitleProps) {
           letterSpacing: "-0.01em",
           color,
           lineHeight: 1.1,
+          // Overrides the app-wide `tabular-nums` (body, app/globals.css) —
+          // fixed-width digit glyphs read oddly against a title stretched
+          // via the wdth axis (e.g. "Mesoscale Discussion 1939"); proportional
+          // numerals match the rest of the stretched letterforms.
+          fontVariantNumeric: "normal",
         }}
       >
         {text}

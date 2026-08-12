@@ -1,4 +1,5 @@
 import type { ConfigFile, LocationsFile, SavedLocation } from "./settings";
+import type { AppInfo, UpdaterStatus } from "./updater";
 
 // Mirrors the shape contextBridge.exposeInMainWorld("silverSkies", ...)
 // exposes from electron/preload.ts. Kept as a separate declaration since
@@ -17,9 +18,15 @@ export interface SilverSkiesApi {
   };
   app: {
     getVersion(): Promise<string>;
+    getInfo(): Promise<AppInfo>;
     openExternal(url: string): Promise<void>;
     setOverlayIcon(dataUrl: string | null, description: string): Promise<void>;
     notify(title: string, body: string): Promise<void>;
+  };
+  updater: {
+    check(): Promise<void>;
+    install(): Promise<void>;
+    onStatus(callback: (status: UpdaterStatus) => void): () => void;
   };
 }
 

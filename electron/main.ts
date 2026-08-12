@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import serve from "electron-serve";
 import { autoUpdater } from "electron-updater";
 import { configStore, locationsStore } from "./store";
-import type { SavedLocation } from "./types";
+import type { AppInfo, SavedLocation, UpdaterStatus } from "./types";
 
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 const DEV_URL = "http://localhost:3000";
@@ -143,6 +143,18 @@ function registerIpcHandlers() {
 
   ipcMain.handle("app:getVersion", () => app.getVersion());
 
+  ipcMain.handle(
+    "app:getInfo",
+    (): AppInfo => ({
+      version: app.getVersion(),
+      electron: process.versions.electron ?? "?",
+      chrome: process.versions.chrome ?? "?",
+      node: process.versions.node ?? "?",
+      platform: process.platform,
+      arch: process.arch,
+    }),
+  );
+
   ipcMain.handle("app:openExternal", (_event, url: string) => shell.openExternal(url));
 
   // Taskbar "weather badge" — a small current-conditions glyph overlaid on
@@ -176,6 +188,39 @@ function registerIpcHandlers() {
   });
 }
 
+function sendUpdaterStatus(status: UpdaterStatus) {
+  mainWindow?.webContents.send("updater:status", status);
+}
+
+/** Wires electron-updater's events to the renderer (About tab) and exposes
+ * a manual check/install pair on top of the silent `checkForUpdatesAndNotify`
+ * call at startup below — that one only ever surfaces a native OS
+ * notification, nothing the UI itself can react to. */
+function registerUpdaterHandlers() {
+  autoUpdater.on("checking-for-update", () => sendUpdaterStatus({ state: "checking" }));
+  autoUpdater.on("update-available", (info) => sendUpdaterStatus({ state: "available", version: info.version }));
+  autoUpdater.on("update-not-available", () => sendUpdaterStatus({ state: "not-available" }));
+  autoUpdater.on("download-progress", (progress) =>
+    sendUpdaterStatus({ state: "downloading", percent: Math.round(progress.percent) }),
+  );
+  autoUpdater.on("update-downloaded", (info) => sendUpdaterStatus({ state: "downloaded", version: info.version }));
+  autoUpdater.on("error", (err) => sendUpdaterStatus({ state: "error", message: err.message }));
+
+  ipcMain.handle("updater:check", () => {
+    // Unpackaged/dev builds have no app-update.yml (electron-builder only
+    // writes one into a real installer) — checkForUpdates() would just
+    // throw, so short-circuit with a status the UI can explain plainly
+    // instead of surfacing it as a generic error.
+    if (!app.isPackaged) {
+      sendUpdaterStatus({ state: "unsupported" });
+      return;
+    }
+    autoUpdater.checkForUpdates().catch((err) => sendUpdaterStatus({ state: "error", message: String(err) }));
+  });
+
+  ipcMain.handle("updater:install", () => autoUpdater.quitAndInstall());
+}
+
 // Windows groups/attributes toast notifications by AppUserModelID — without
 // this, notifications from an unpackaged/dev build can silently fail to
 // show the app's icon or, on some Windows builds, not show at all.
@@ -186,6 +231,7 @@ if (process.platform === "win32") {
 app.whenReady().then(() => {
   registerUserAgentHeader();
   registerIpcHandlers();
+  registerUpdaterHandlers();
   createWindow();
 
   // No-op until `publish.owner` in package.json is pointed at a real repo
