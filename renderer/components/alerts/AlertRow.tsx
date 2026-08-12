@@ -51,7 +51,12 @@ export function AlertRow({ alert }: { alert: NormalizedAlert }) {
         }
       />
       <DialogContent
-        className="max-h-[80vh] w-full overflow-x-hidden overflow-y-auto thin-scroll rounded-none p-6 sm:max-w-lg"
+        // `alert.cssClass` (which only ever sets the --ac custom property —
+        // see the taxonomy in app/globals.css) has to live on this element
+        // itself, not a descendant: the border/shadow/scrollbar below all
+        // read var(--ac) right here, and a CSS custom property set on a
+        // child isn't visible to its own ancestor.
+        className={`${alert.cssClass} max-h-[80vh] w-full overflow-x-hidden overflow-y-auto alert-modal-scroll rounded-none p-6 sm:max-w-lg`}
         style={{
           border: `2px solid var(--ac, #888)`,
           boxShadow: `0 0 32px color-mix(in srgb, var(--ac, #888) 35%, transparent)`,
@@ -62,7 +67,7 @@ export function AlertRow({ alert }: { alert: NormalizedAlert }) {
         // instant the dialog opens. Focus the dialog surface itself instead.
         initialFocus={false}
       >
-        <div className={`${alert.cssClass} min-w-0`}>
+        <div className="min-w-0">
           <DialogHeader className="min-w-0 gap-2">
             <div className="flex items-center gap-3">
               <i className={`ph ph-${iconName}`} aria-hidden="true" style={{ fontSize: "2rem", color: "var(--ac, #888)", flexShrink: 0 }} />
