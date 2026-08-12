@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ipc } from "@/lib/ipc-client";
 import { TopBar } from "./TopBar";
 import { LeftSidebar } from "./LeftSidebar";
 import { RightSidebar } from "./RightSidebar";
@@ -13,6 +14,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useWeather } from "@/hooks/useWeather";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useSpcOutlook } from "@/hooks/useSpcOutlook";
+import { useRadarSettings } from "@/hooks/useRadarSettings";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 import { useConditionAccent } from "@/hooks/useConditionAccent";
 import { useSeverePulse } from "@/hooks/useSeverePulse";
@@ -38,6 +40,16 @@ export function Shell() {
   const alertsQuery = useAlerts(active?.lat ?? null, active?.lon ?? null);
   const spcOutlookEnabled = config?.spcOutlookEnabled ?? true;
   const spcOutlookQuery = useSpcOutlook(spcOutlookEnabled);
+  // The main window's own docked radar instance — a pop-out radar window
+  // owns a completely separate one (see RadarWindow.tsx), never synced with
+  // this one, by design.
+  const radarSettings = useRadarSettings();
+  const isAdvancedUi = (config?.uiMode ?? "classic") === "advanced";
+  // True once the main window's own radar has been undocked into its own
+  // window (see TopBar's "Pop Out" button) — the middle column then gives
+  // the audit log the full column instead of sharing it with the map.
+  const [radarPoppedOut, setRadarPoppedOut] = useState(false);
+  useEffect(() => ipc.windows.onPrimaryRadarClosed(() => setRadarPoppedOut(false)), []);
   const [demoAlerts, setDemoAlerts] = useState<NormalizedAlert[]>([]);
   // The asteroid easter egg forces a specific pulse color directly rather
   // than deriving one from alert classification (it isn't a real hazard
@@ -99,6 +111,20 @@ export function Shell() {
     if (saved) selectSaved(saved.id);
   }
 
+  function handlePopOutRadar() {
+    setRadarPoppedOut(true);
+    void ipc.windows.openRadar({
+      location: active ? { lat: active.lat, lon: active.lon, label: active.label } : null,
+      isPrimaryPopout: true,
+    });
+  }
+
+  function handleNewRadarWindow() {
+    void ipc.windows.openRadar({
+      location: active ? { lat: active.lat, lon: active.lon, label: active.label } : null,
+    });
+  }
+
   return (
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: "var(--bg)" }}>
       {/* #top-glow (app/layout.tsx) is a fixed strip right at the window's
@@ -124,6 +150,10 @@ export function Shell() {
           onSetUnit={(u) => updateConfig({ units: u })}
           timezone={weatherQuery.data?.timezone}
           timeFormat={timeFormat}
+          showRadarWindowActions={isAdvancedUi}
+          radarPoppedOut={radarPoppedOut}
+          onPopOutRadar={handlePopOutRadar}
+          onNewRadarWindow={handleNewRadarWindow}
         />
       </div>
 
@@ -150,20 +180,25 @@ export function Shell() {
         />
 
         <div className="flex min-h-0 flex-col gap-4">
-          <div className="min-h-0" style={{ flex: "2 1 0%" }}>
-            {active && (
-              <RadarMap
-                lat={active.lat}
-                lon={active.lon}
-                label={active.label}
-                libreWxrHost={libreWxrHost}
-                theme={resolvedTheme}
-                preloadLocations={savedLocations}
-                spcOutlookEnabled={spcOutlookEnabled}
-              />
-            )}
-          </div>
-          <div className="glass-card min-h-0 p-3" style={{ flex: "1 1 0%" }}>
+          {!radarPoppedOut && (
+            <div className="min-h-0" style={{ flex: "2 1 0%" }}>
+              {active && (
+                <RadarMap
+                  lat={active.lat}
+                  lon={active.lon}
+                  label={active.label}
+                  libreWxrHost={libreWxrHost}
+                  theme={resolvedTheme}
+                  preloadLocations={savedLocations}
+                  spcOutlookEnabled={spcOutlookEnabled}
+                  settings={radarSettings}
+                />
+              )}
+            </div>
+          )}
+          {/* Popping the radar out frees the whole column for the audit log
+              instead of splitting it 2:1 with the map. */}
+          <div className="glass-card min-h-0 p-3" style={{ flex: radarPoppedOut ? "1 1 100%" : "1 1 0%" }}>
             <AlertLog
               alerts={alertsQuery.data ?? []}
               isLoading={alertsQuery.isLoading}

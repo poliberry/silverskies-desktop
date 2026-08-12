@@ -17,10 +17,14 @@ import { resolveAlertColor } from "@/lib/alerts/color.client";
 import { preloadRadarFrame } from "@/lib/radar-preload";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useSpcOutlook } from "@/hooks/useSpcOutlook";
+import { useSettings } from "@/hooks/useSettings";
 import type { RadarMapProps } from "./RadarMap";
 import { RadarControls } from "./RadarControls";
+import { RadarPlaybackBar } from "./RadarPlaybackBar";
 import { RadarLegend } from "./RadarLegend";
 import { RadarTileCrossfade } from "./RadarTileCrossfade";
+import { WeatherTileOverlay } from "./overlays/WeatherTileOverlay";
+import { AqiBadge } from "./overlays/AqiBadge";
 
 // Fixed zoom level used for background tile preloading (saved locations,
 // the ring around the active one) — independent of whatever zoom the user
@@ -29,7 +33,15 @@ import { RadarTileCrossfade } from "./RadarTileCrossfade";
 const PRELOAD_ZOOM = 7;
 
 const CARTO_DARK = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
-const CARTO_LIGHT = "https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}{r}.png";
+// Was pointed at bare "voyager/{z}/{x}/{y}" — that path 404s (voyager tiles
+// are only served under "/rastertiles/voyager/…"), so the *entire* light-mode
+// basemap silently failed to load, leaving the radar layer floating over a
+// blank container with nothing to give it visual context. "light_all" is
+// CARTO's muted Positron style, served at the same bare path as dark_all,
+// and (being flat/low-contrast like dark_all) is also a better basemap to
+// put a semi-transparent radar overlay on top of than the busy, colorful
+// voyager style would have been.
+const CARTO_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
 const CARTO_ATTRIB =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
@@ -210,12 +222,29 @@ function SpcOutlookLayer({ enabled }: { enabled: boolean }) {
   );
 }
 
-export function LeafletRadarMap({ lat, lon, label, libreWxrHost, theme, preloadLocations, spcOutlookEnabled }: RadarMapProps) {
+export function LeafletRadarMap({
+  lat,
+  lon,
+  label,
+  libreWxrHost,
+  theme,
+  preloadLocations,
+  spcOutlookEnabled,
+  settings,
+  renderSettingsInline = true,
+}: RadarMapProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [colorScheme, setColorScheme] = useState(1);
-  const [showArrows, setShowArrows] = useState(false);
-  const [showCells, setShowCells] = useState(false);
+  const { colorScheme, showArrows, showCells, showPolygons } = settings;
+
+  // Config (and therefore the OpenWeatherMap key) is app-wide IPC-backed
+  // state, not window-scoped — calling useSettings() here directly, rather
+  // than threading the key through as its own prop, keeps every radar
+  // instance (docked or pop-out) in sync with the same Settings dialog
+  // value with no extra plumbing at each call site.
+  const { config } = useSettings();
+  const owmApiKey = config?.openWeatherMapApiKey ?? null;
+  const overlaysAvailable = Boolean(owmApiKey);
 
   const { data: weatherMaps } = useQuery({
     queryKey: ["librewxr-weather-maps", libreWxrHost],
@@ -326,7 +355,12 @@ export function LeafletRadarMap({ lat, lon, label, libreWxrHost, theme, preloadL
         >
           <TileLayer url={theme === "light" ? CARTO_LIGHT : CARTO_DARK} attribution={CARTO_ATTRIB} />
           <RadarTileCrossfade url={debouncedRadarUrl} targetOpacity={0.75} zIndex={5} />
-          <AlertPolygonsLayer host={libreWxrHost} />
+          {settings.showWindOverlay && owmApiKey && <WeatherTileOverlay layer="wind_new" apiKey={owmApiKey} zIndex={6} />}
+          {settings.showTempOverlay && owmApiKey && <WeatherTileOverlay layer="temp_new" apiKey={owmApiKey} zIndex={7} />}
+          {settings.showPrecipOverlay && owmApiKey && (
+            <WeatherTileOverlay layer="precipitation_new" apiKey={owmApiKey} zIndex={8} />
+          )}
+          {showPolygons && <AlertPolygonsLayer host={libreWxrHost} />}
           <SpcOutlookLayer enabled={spcOutlookEnabled} />
           <Marker position={[lat, lon]} icon={locationIcon} />
           <RecenterOnLocationChange lat={lat} lon={lon} />
@@ -356,30 +390,56 @@ export function LeafletRadarMap({ lat, lon, label, libreWxrHost, theme, preloadL
                 LIVE
               </div>
             )}
+            {settings.showAqiOverlay && owmApiKey && <AqiBadge lat={lat} lon={lon} apiKey={owmApiKey} />}
             <RadarLegend colorScheme={colorScheme} colorSchemes={weatherMaps?.radar.colorSchemes ?? []} />
           </div>
         </div>
       </div>
 
-      {frames.length > 0 && (
-        <RadarControls
-          frames={frames}
-          nowcastStartIndex={nowcastStartIndex}
-          selectedIndex={selectedIndex}
-          onSelectIndex={setSelectedIndex}
-          isPlaying={isPlaying}
-          onTogglePlay={() => setIsPlaying((v) => !v)}
-          colorSchemes={weatherMaps?.radar.colorSchemes ?? []}
-          colorScheme={colorScheme}
-          onColorSchemeChange={setColorScheme}
-          showArrows={showArrows}
-          onToggleArrows={() => setShowArrows((v) => !v)}
-          showCells={showCells}
-          onToggleCells={() => setShowCells((v) => !v)}
-          isLive={isLive}
-          onJumpToLive={() => setSelectedIndex(latestObservedIndex)}
-        />
-      )}
+      {frames.length > 0 &&
+        (renderSettingsInline ? (
+          <RadarControls
+            frames={frames}
+            nowcastStartIndex={nowcastStartIndex}
+            selectedIndex={selectedIndex}
+            onSelectIndex={setSelectedIndex}
+            isPlaying={isPlaying}
+            onTogglePlay={() => setIsPlaying((v) => !v)}
+            isLive={isLive}
+            onJumpToLive={() => setSelectedIndex(latestObservedIndex)}
+            colorSchemes={weatherMaps?.radar.colorSchemes ?? []}
+            colorScheme={colorScheme}
+            onColorSchemeChange={settings.setColorScheme}
+            showArrows={showArrows}
+            onToggleArrows={settings.toggleArrows}
+            showCells={showCells}
+            onToggleCells={settings.toggleCells}
+            showPolygons={showPolygons}
+            onTogglePolygons={settings.togglePolygons}
+            showWindOverlay={settings.showWindOverlay}
+            onToggleWindOverlay={settings.toggleWindOverlay}
+            showTempOverlay={settings.showTempOverlay}
+            onToggleTempOverlay={settings.toggleTempOverlay}
+            showPrecipOverlay={settings.showPrecipOverlay}
+            onTogglePrecipOverlay={settings.togglePrecipOverlay}
+            showAqiOverlay={settings.showAqiOverlay}
+            onToggleAqiOverlay={settings.toggleAqiOverlay}
+            overlaysAvailable={overlaysAvailable}
+          />
+        ) : (
+          <div className="glass-card flex flex-col gap-2 p-3">
+            <RadarPlaybackBar
+              frames={frames}
+              nowcastStartIndex={nowcastStartIndex}
+              selectedIndex={selectedIndex}
+              onSelectIndex={setSelectedIndex}
+              isPlaying={isPlaying}
+              onTogglePlay={() => setIsPlaying((v) => !v)}
+              isLive={isLive}
+              onJumpToLive={() => setSelectedIndex(latestObservedIndex)}
+            />
+          </div>
+        ))}
     </div>
   );
 }

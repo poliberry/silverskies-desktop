@@ -15,6 +15,11 @@ export interface TopBarProps {
   onSetUnit: (u: UnitPref) => void;
   timezone: string | undefined;
   timeFormat: TimeFormatPref;
+  /** Only shown when Settings → Interface is set to "Advanced". */
+  showRadarWindowActions?: boolean;
+  radarPoppedOut?: boolean;
+  onPopOutRadar?: () => void;
+  onNewRadarWindow?: () => void;
 }
 
 export function TopBar({
@@ -27,6 +32,10 @@ export function TopBar({
   onSetUnit,
   timezone,
   timeFormat,
+  showRadarWindowActions,
+  radarPoppedOut,
+  onPopOutRadar,
+  onNewRadarWindow,
 }: TopBarProps) {
   const clock = useClock(timezone, timeFormat);
 
@@ -57,6 +66,18 @@ export function TopBar({
           </span>
           {clock}
         </span>
+        {showRadarWindowActions && (
+          <div className="unit-toggle">
+            {!radarPoppedOut && (
+              <button className="unit-btn" onClick={onPopOutRadar} title="Undock the radar into its own window">
+                Pop Out
+              </button>
+            )}
+            <button className="unit-btn" onClick={onNewRadarWindow} title="Open another, independent radar window">
+              New Window
+            </button>
+          </div>
+        )}
         <button className={`refresh-btn ${isRefreshing ? "spinning" : ""}`} onClick={onRefresh}>
           <span className="ri">↻</span>
         </button>

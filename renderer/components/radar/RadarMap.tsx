@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import type { RadarSettings } from "@/hooks/useRadarSettings";
 
 // Leaflet touches `window` at module scope, so it can only ever run in the
 // browser — dynamic-import it with ssr disabled from this Client Component
@@ -29,6 +30,14 @@ export interface RadarMapProps {
   preloadLocations?: { lat: number; lon: number }[];
   /** Settings toggle for the SPC Day 1 Categorical Outlook overlay. */
   spcOutlookEnabled: boolean;
+  /** Owned by whichever component hosts this radar instance (Shell for the
+   * docked map, RadarWindow for a pop-out) — see hooks/useRadarSettings.ts.
+   * Each instance gets its own independent settings object. */
+  settings: RadarSettings;
+  /** False when a pop-out window's alt bar (RadarWindowToolbar) is already
+   * rendering RadarSettingsControls — the under-map bar then shows only
+   * playback controls instead of duplicating them. Defaults to true. */
+  renderSettingsInline?: boolean;
 }
 
 export function RadarMap(props: RadarMapProps) {

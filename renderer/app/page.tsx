@@ -1,5 +1,5 @@
-import { Shell } from "@/components/layout/Shell";
+import { WindowRouter } from "./WindowRouter";
 
 export default function Page() {
-  return <Shell />;
+  return <WindowRouter />;
 }
