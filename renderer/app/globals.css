@@ -445,6 +445,7 @@ body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
 .alert-minor { --ac: #80d0ff; }
 .alert-unknown { --ac: #888888; }
 .alert-asteroid { --ac: #ff4400; }
+.alert-mesoscale-discussion { --ac: #4a90d9; }
 
 /* ECCC (Environment Canada) risk-colour tiers */
 .eccc-red { --ac: #cc0000; }

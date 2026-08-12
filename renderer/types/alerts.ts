@@ -1,4 +1,4 @@
-export type AlertSource = "nws" | "eccc" | "librewxr";
+export type AlertSource = "nws" | "eccc" | "librewxr" | "bom" | "spc";
 
 /** GeoJSON-ish geometry, loosely typed so we don't need a full @types/geojson
  * dependency just for the map polygon layer. */

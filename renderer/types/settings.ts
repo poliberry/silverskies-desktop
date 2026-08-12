@@ -23,6 +23,9 @@ export interface LocationsFile {
 export interface ConfigFile {
   provider: WeatherProviderId;
   accuWeatherApiKey: string | null;
+  /** WillyWeather API key — powers Australian BOM warnings/alerts (WillyWeather
+   * re-publishes BOM's own warning feed under a documented, keyed public API). */
+  willyWeatherApiKey: string | null;
   libreWxrHost: string;
   units: UnitPref;
   timeFormat: TimeFormatPref;

@@ -21,6 +21,7 @@ import { useAsteroid } from "@/hooks/useAsteroid";
 import { useLocationWatcher } from "@/hooks/useLocationWatcher";
 import { AsteroidCountdown } from "@/components/easter-eggs/AsteroidCountdown";
 import { activeSeverePulseColor } from "@/lib/alerts/merge";
+import { buildTodayOutlook } from "@/lib/forecast-outlook";
 import { ProviderConfigError } from "@/lib/providers";
 import type { NormalizedAlert } from "@/types/alerts";
 import type { UnitPref } from "@/types/settings";
@@ -69,6 +70,10 @@ export function Shell() {
   const unit: UnitPref = config?.units ?? "F";
   const timeFormat = config?.timeFormat ?? "12";
   const libreWxrHost = config?.libreWxrHost ?? "https://api.librewxr.net";
+
+  const todayOutlook = weatherQuery.data
+    ? buildTodayOutlook(weatherQuery.data.current, weatherQuery.data.daily[0], unit)
+    : null;
 
   const weatherError =
     weatherQuery.error instanceof ProviderConfigError
@@ -150,7 +155,12 @@ export function Shell() {
             )}
           </div>
           <div className="glass-card min-h-0 p-3" style={{ flex: "1 1 0%" }}>
-            <AlertLog alerts={alertsQuery.data ?? []} isLoading={alertsQuery.isLoading} demoAlerts={demoAlerts} />
+            <AlertLog
+              alerts={alertsQuery.data ?? []}
+              isLoading={alertsQuery.isLoading}
+              demoAlerts={demoAlerts}
+              todayOutlook={todayOutlook}
+            />
           </div>
         </div>
 
