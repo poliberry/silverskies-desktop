@@ -43,6 +43,8 @@ export function useLocationWatcher() {
   savedLocationsRef.current = savedLocations;
   const libreWxrHostRef = useRef(config?.libreWxrHost);
   libreWxrHostRef.current = config?.libreWxrHost;
+  const willyWeatherApiKeyRef = useRef(config?.willyWeatherApiKey);
+  willyWeatherApiKeyRef.current = config?.willyWeatherApiKey;
 
   useEffect(() => {
     if (!config?.notificationsEnabled) return;
@@ -51,9 +53,10 @@ export function useLocationWatcher() {
 
     async function checkLocation(loc: (typeof savedLocationsRef.current)[number]) {
       const libreWxrHost = libreWxrHostRef.current ?? "https://api.librewxr.net";
+      const willyWeatherApiKey = willyWeatherApiKeyRef.current ?? null;
       const [weather, alerts] = await Promise.all([
         openMeteoProvider.fetchWeather({ lat: loc.lat, lon: loc.lon }),
-        fetchMergedAlerts(loc.lat, loc.lon, libreWxrHost),
+        fetchMergedAlerts(loc.lat, loc.lon, libreWxrHost, willyWeatherApiKey),
       ]);
 
       return [

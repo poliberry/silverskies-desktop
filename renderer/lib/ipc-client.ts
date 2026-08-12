@@ -6,6 +6,7 @@ const DEFAULT_LOCATIONS: LocationsFile = { savedLocations: [], activeLocationId:
 const DEFAULT_CONFIG: ConfigFile = {
   provider: "open-meteo",
   accuWeatherApiKey: null,
+  willyWeatherApiKey: null,
   libreWxrHost: "https://api.librewxr.net",
   units: "F",
   timeFormat: "12",

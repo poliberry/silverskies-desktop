@@ -107,3 +107,9 @@ const WMO_LABEL: Record<number, string> = {
 export function wmoLabel(code: number): string {
   return WMO_LABEL[code] ?? "Unknown";
 }
+
+/** Thunderstorm, heavy rain, heavy snow, wintry mix/sleet/freezing rain —
+ * the WMO codes worth a heads-up on their own, even before an official
+ * alert exists. Shared by the notification watcher and the audit log's
+ * today-outlook line so both use the exact same bar. */
+export const SEVERE_WMO_CODES = new Set([95, 96, 99, 65, 82, 75, 86, 56, 57, 66, 67]);

@@ -106,6 +106,7 @@ const ALERT_CLASS_MAP: ClassRule[] = [
   [/asteroid/i, "alert-asteroid"],
   // General
   [/special weather statement/i, "alert-special-wx-stmt"],
+  [/mesoscale discussion/i, "alert-mesoscale-discussion"],
 ];
 
 /** Severity → CSS class fallback when no event-name rule matches. */
@@ -157,6 +158,7 @@ export function getDisplayEvent(event: string, cls: string): string {
 /** Phosphor icon name for a given event/hazard name. */
 export function alertIconName(eventName: string): string {
   const e = eventName.toLowerCase();
+  if (/mesoscale discussion/.test(e)) return "chat-centered-text";
   if (/tornado/.test(e)) return "tornado";
   if (/hurricane|typhoon|tropical storm|tropical dep/.test(e)) return "hurricane";
   if (/thunderstorm|severe thunder/.test(e)) return "cloud-lightning";

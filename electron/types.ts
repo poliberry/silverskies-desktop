@@ -21,6 +21,9 @@ export type ThemePref = "system" | "light" | "dark";
 export interface ConfigFile {
   provider: WeatherProviderId;
   accuWeatherApiKey: string | null;
+  /** WillyWeather API key — powers Australian BOM warnings/alerts (WillyWeather
+   * re-publishes BOM's own warning feed under a documented, keyed public API). */
+  willyWeatherApiKey: string | null;
   libreWxrHost: string;
   units: UnitPref;
   timeFormat: TimeFormatPref;
@@ -40,6 +43,7 @@ export const DEFAULT_LOCATIONS: LocationsFile = {
 export const DEFAULT_CONFIG: ConfigFile = {
   provider: "open-meteo",
   accuWeatherApiKey: null,
+  willyWeatherApiKey: null,
   libreWxrHost: "https://api.librewxr.net",
   units: "F",
   timeFormat: "12",

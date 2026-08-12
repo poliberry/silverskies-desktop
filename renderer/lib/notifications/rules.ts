@@ -1,6 +1,6 @@
 import type { NormalizedAlert } from "@/types/alerts";
 import type { DailyPoint, HourlyPoint } from "@/types/weather";
-import { wmoLabel } from "@/lib/icons/wmo";
+import { SEVERE_WMO_CODES, wmoLabel } from "@/lib/icons/wmo";
 
 export interface NotificationCandidate {
   /** De-dupe key — see lib/notifications/dedupe-store.ts. */
@@ -8,10 +8,6 @@ export interface NotificationCandidate {
   title: string;
   body: string;
 }
-
-/** Thunderstorm, heavy rain, heavy snow, wintry mix/sleet/freezing rain —
- * the WMO codes worth a heads-up even before an official alert exists. */
-const SEVERE_CODES = new Set([95, 96, 99, 65, 82, 75, 86, 56, 57, 66, 67]);
 
 const NOTIFIABLE_SEVERITIES = new Set(["Extreme", "Severe", "Moderate"]);
 
@@ -48,7 +44,7 @@ export function detectNotableForecast(
       body: `${locationLabel} — ${tomorrow.precipitationProbabilityMaxPct}% chance of precipitation, ${wmoLabel(tomorrow.weatherCode).toLowerCase()}.`,
     });
   }
-  if (SEVERE_CODES.has(tomorrow.weatherCode)) {
+  if (SEVERE_WMO_CODES.has(tomorrow.weatherCode)) {
     candidates.push({
       key: `forecast-severe:${locationId}:${tomorrow.date}`,
       title: `⛈ ${wmoLabel(tomorrow.weatherCode)} expected tomorrow`,
@@ -71,7 +67,7 @@ export function detectExpectedSevere(
   const cutoff = now + hoursAhead * 3_600_000;
   const hit = hourly.find((h) => {
     const t = new Date(h.time).getTime();
-    return t >= now && t <= cutoff && SEVERE_CODES.has(h.weatherCode);
+    return t >= now && t <= cutoff && SEVERE_WMO_CODES.has(h.weatherCode);
   });
   if (!hit) return [];
 

@@ -9,10 +9,11 @@ import { useSettings } from "./useSettings";
 export function useAlerts(lat: number | null, lon: number | null) {
   const { config } = useSettings();
   const libreWxrHost = config?.libreWxrHost ?? "https://api.librewxr.net";
+  const willyWeatherApiKey = config?.willyWeatherApiKey ?? null;
 
   return useQuery({
-    queryKey: ["alerts", lat, lon, libreWxrHost],
-    queryFn: () => fetchMergedAlerts(lat as number, lon as number, libreWxrHost),
+    queryKey: ["alerts", lat, lon, libreWxrHost, willyWeatherApiKey],
+    queryFn: () => fetchMergedAlerts(lat as number, lon as number, libreWxrHost, willyWeatherApiKey),
     enabled: lat !== null && lon !== null,
     refetchInterval: 5 * 60_000,
   });

@@ -3,22 +3,27 @@
 import { useMemo, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { AlertSource, NormalizedAlert } from "@/types/alerts";
+import type { TodayOutlook } from "@/lib/forecast-outlook";
 import { AlertRow } from "./AlertRow";
+import { TodayOutlookRow } from "./TodayOutlookRow";
 
 const SEVERITIES = ["Extreme", "Severe", "Moderate", "Minor"] as const;
 const SOURCE_LABEL: Record<AlertSource, string> = {
   nws: "NWS",
   eccc: "ECCC",
   librewxr: "WMO",
+  bom: "BOM",
+  spc: "SPC",
 };
 
 interface AlertLogProps {
   alerts: NormalizedAlert[];
   isLoading?: boolean;
   demoAlerts?: NormalizedAlert[];
+  todayOutlook?: TodayOutlook | null;
 }
 
-export function AlertLog({ alerts, isLoading, demoAlerts = [] }: AlertLogProps) {
+export function AlertLog({ alerts, isLoading, demoAlerts = [], todayOutlook }: AlertLogProps) {
   const [severityFilter, setSeverityFilter] = useState<Set<string>>(new Set());
   const [sourceFilter, setSourceFilter] = useState<Set<AlertSource>>(new Set());
 
@@ -70,6 +75,8 @@ export function AlertLog({ alerts, isLoading, demoAlerts = [] }: AlertLogProps) 
           ))}
         </div>
       </div>
+
+      {todayOutlook && <TodayOutlookRow outlook={todayOutlook} />}
 
       <ScrollArea className="flex-1 min-h-0">
         <div className="flex flex-col gap-2 pr-2 pb-2">

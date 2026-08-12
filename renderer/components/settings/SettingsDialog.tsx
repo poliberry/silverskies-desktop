@@ -40,12 +40,14 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   const { config, updateConfig } = useSettings();
   const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const [willyWeatherKeyDraft, setWillyWeatherKeyDraft] = useState("");
   const [hostDraft, setHostDraft] = useState("");
 
   useEffect(() => {
     setApiKeyDraft(config?.accuWeatherApiKey ?? "");
+    setWillyWeatherKeyDraft(config?.willyWeatherApiKey ?? "");
     setHostDraft(config?.libreWxrHost ?? "https://api.librewxr.net");
-  }, [config?.accuWeatherApiKey, config?.libreWxrHost]);
+  }, [config?.accuWeatherApiKey, config?.willyWeatherApiKey, config?.libreWxrHost]);
 
   if (!config) return null;
 
@@ -172,6 +174,24 @@ export function SettingsDialog({
             <p className="font-mono text-[0.68rem]" style={{ color: "var(--text3)" }}>
               Desktop toasts for new alerts, notable next-day forecasts, and heads-up severe weather —
               checked across all of your saved locations, not just the one on screen.
+            </p>
+          </div>
+
+          <div className="settings-bar-section">
+            <div className="settings-bar-label">WILLYWEATHER API KEY (BOM WARNINGS)</div>
+            <input
+              id="willyweather-key"
+              className="search-input"
+              type="password"
+              placeholder="Paste your WillyWeather API key"
+              value={willyWeatherKeyDraft}
+              onChange={(e) => setWillyWeatherKeyDraft(e.target.value)}
+              onBlur={() => updateConfig({ willyWeatherApiKey: willyWeatherKeyDraft.trim() || null })}
+            />
+            <p className="font-mono text-[0.68rem]" style={{ color: "var(--text3)" }}>
+              Stored locally in config.json — never sent anywhere but WillyWeather. Powers Australian BOM
+              warnings/alerts for locations in Australia. No documented free tier — get a key at
+              willyweather.com.au/info/api.html. Left blank, BOM alerts are simply skipped.
             </p>
           </div>
 

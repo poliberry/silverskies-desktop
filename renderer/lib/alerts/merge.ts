@@ -1,9 +1,11 @@
 import type { NormalizedAlert } from "@/types/alerts";
 import { resolveAlertColor } from "./color.client";
 import { getPulseColorForClass, isAirQualityEvent } from "./classify";
+import { fetchBomAlerts, isAustralia } from "./willyweather";
 import { fetchEcccAlerts, isCanada } from "./eccc";
 import { fetchLibreWxrAlerts, type BBox } from "./librewxr";
 import { fetchNwsAlerts } from "./nws";
+import { fetchSpcMdAlerts } from "./spc-md";
 
 const SEVERITY_RANK: Record<string, number> = {
   Extreme: 0,
@@ -25,24 +27,28 @@ function inNwsCoverage(lat: number, lon: number): boolean {
 }
 
 /**
- * Audit-log alert feed for a location: NWS + ECCC direct (official, richer
- * metadata) merged with LibreWXR's global WMO CAP/MeteoAlarm feed for
- * everywhere outside their coverage, de-duped by event+area+onset, sorted
- * most-severe/most-recent first.
+ * Audit-log alert feed for a location: NWS + ECCC + BOM (via WillyWeather,
+ * official BOM data — richer metadata) merged with LibreWXR's global WMO
+ * CAP/MeteoAlarm feed for everywhere outside their coverage, de-duped by
+ * event+area+onset, sorted most-severe/most-recent first.
  */
 export async function fetchMergedAlerts(
   lat: number,
   lon: number,
   libreWxrHost: string,
+  willyWeatherApiKey: string | null = null,
 ): Promise<NormalizedAlert[]> {
   const isCa = isCanada(lat, lon);
   const isUs = inNwsCoverage(lat, lon);
+  const isAu = isAustralia(lat, lon);
   const buffer = 1.5;
   const bbox: BBox = [lon - buffer, lat - buffer, lon + buffer, lat + buffer];
 
   const tasks: Promise<NormalizedAlert[]>[] = [fetchNwsAlerts(lat, lon)];
   if (isCa) tasks.push(fetchEcccAlerts(lat, lon));
-  if (!isUs && !isCa) tasks.push(fetchLibreWxrAlerts(libreWxrHost, bbox));
+  if (isAu) tasks.push(fetchBomAlerts(lat, lon, willyWeatherApiKey));
+  if (isUs) tasks.push(fetchSpcMdAlerts(bbox));
+  if (!isUs && !isCa && !isAu) tasks.push(fetchLibreWxrAlerts(libreWxrHost, bbox));
 
   const results = await Promise.allSettled(tasks);
   const all = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));

@@ -34,8 +34,25 @@ Both are written atomically (temp file + rename) so a crash mid-write can't corr
   the app caches the resolved AccuWeather location key per saved location to avoid burning
   quota on repeat geoposition lookups.
 
-Severe-weather alerts (NWS, Environment Canada, and LibreWXR's global WMO/CAP feed) are always
-fetched independently of whichever weather provider is selected.
+Severe-weather alerts (NWS, Environment Canada, Australia's Bureau of Meteorology, SPC Mesoscale
+Discussions, and LibreWXR's global WMO/CAP feed for everywhere else) are always fetched
+independently of whichever weather provider is selected.
+
+**A note on the BOM integration** (`lib/alerts/willyweather.ts`): BOM doesn't publish a usable
+third-party API itself (the "BOM Weather" app's own JSON feed is explicitly marked "you must not
+use, copy or share it", and the public bom.gov.au website/RSS feeds actively block automated
+requests), so Australian warnings go through [WillyWeather's public, documented
+API](https://www.willyweather.com.au/api/docs/warnings.html) instead, which re-publishes the same
+underlying BOM warning data. Requires your own WillyWeather API key (Settings) — there's no
+documented free tier, so this is opt-in and silently skipped without a key.
+
+**SPC Mesoscale Discussions** (`lib/alerts/spc-md.ts`): forecaster situational-awareness products
+that often precede a severe thunderstorm/tornado watch. They aren't part of NWS's `/alerts/active`
+CAP feed at all, so polygon geometry comes from SPC's public ArcGIS layer
+(`mapservices.weather.noaa.gov/.../spc_mesoscale_discussion`) and the full discussion text is
+cross-referenced from the NWS Products API by MD number — that API oddly files these under the
+sub-product code "MCD" rather than SPC's office id, which took some digging to find. Fetched
+wherever NWS alerts are (CONUS), and their polygons render on the radar map alongside real alerts.
 
 ## Radar (LibreWXR)
 
@@ -133,6 +150,15 @@ to a clean saved location always immediately clears it. An earlier version fed t
 the pulse too, which meant leaving an alerting location for a clean one could still show that
 *previous* location's pulse — technically correct (another saved location still had it), but with
 nothing on screen indicating why, so it just read as broken.
+
+## Today's outlook
+
+A single, plain, unclickable line at the top of the audit log (`lib/forecast-outlook.ts`,
+`components/alerts/TodayOutlookRow.tsx`) — deliberately styled nothing like the real alert cards
+below it (no border, no card, no severity color, not expandable) since it isn't one: it's a
+locally-derived note about the active location's own forecast for today, covering rain chance,
+wind, and any hazardous condition. Only appears when there's actually something worth a mention
+(≥40% rain chance, ≥~25 mph wind, or a hazardous WMO code) — an ordinary calm day shows nothing.
 
 ## Kept from the original app
 

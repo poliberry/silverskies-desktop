@@ -12,6 +12,7 @@ import {
   type BBox,
   type LibreWxrFrame,
 } from "@/lib/alerts/librewxr";
+import { fetchSpcMdAlerts } from "@/lib/alerts/spc-md";
 import { resolveAlertColor } from "@/lib/alerts/color.client";
 import { preloadRadarFrame } from "@/lib/radar-preload";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
@@ -71,7 +72,17 @@ function AlertPolygonsLayer({ host }: { host: string }) {
     refetchInterval: 5 * 60_000,
   });
 
-  const alerts = (data ?? []).filter((a) => a.geometry);
+  // SPC Mesoscale Discussions aren't part of LibreWXR's CAP feed at all
+  // (they're forecaster discussions, not alerts) — fetched separately and
+  // merged into the same polygon layer. The query just comes back empty
+  // outside CONUS, so no extra US-coverage gate is needed here.
+  const { data: mdData } = useQuery({
+    queryKey: ["spc-md-alerts", ...bbox],
+    queryFn: () => fetchSpcMdAlerts(bbox),
+    refetchInterval: 5 * 60_000,
+  });
+
+  const alerts = [...(data ?? []), ...(mdData ?? [])].filter((a) => a.geometry);
   const featureKey = alerts.map((a) => a.id).join(",");
 
   if (!alerts.length) return null;
