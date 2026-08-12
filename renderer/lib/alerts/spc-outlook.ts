@@ -52,25 +52,29 @@ function parseSpcTimestamp(raw: string): string {
  * query covers every location at once.
  */
 export async function fetchSpcCategoricalOutlook(): Promise<SpcOutlookFeature[]> {
-  try {
-    const res = await fetch(`${QUERY_URL}?where=1%3D1&outFields=*&f=geojson`);
-    if (!res.ok) return [];
-    const geo = await res.json();
-    const features: OutlookFeatureRaw[] = geo.features ?? [];
-    return features.map((f) => ({
-      code: f.properties.label,
-      name: f.properties.label2,
-      level: f.properties.dn,
-      stroke: f.properties.stroke,
-      fill: f.properties.fill,
-      valid: parseSpcTimestamp(f.properties.valid),
-      expire: parseSpcTimestamp(f.properties.expire),
-      issue: parseSpcTimestamp(f.properties.issue),
-      geometry: f.geometry,
-    }));
-  } catch {
-    return [];
-  }
+  // Unlike fetchSpcMdAlerts (best-effort merged into a multi-source list,
+  // where one source silently contributing nothing this cycle is a fine
+  // degrade), this is the sole source for both the radar overlay and the
+  // active-location banner, polled on a background refetchInterval — so a
+  // failure here must *throw*, not resolve to `[]`. React Query only
+  // replaces cached `data` on a *successful* refetch; throwing keeps the
+  // last-known-good polygons on screen and surfaces the failure via
+  // `isError`/`error` instead of silently blanking the overlay/banner.
+  const res = await fetch(`${QUERY_URL}?where=1%3D1&outFields=*&f=geojson`);
+  if (!res.ok) throw new Error(`SPC outlook fetch failed: ${res.status}`);
+  const geo = await res.json();
+  const features: OutlookFeatureRaw[] = geo.features ?? [];
+  return features.map((f) => ({
+    code: f.properties.label,
+    name: f.properties.label2,
+    level: f.properties.dn,
+    stroke: f.properties.stroke,
+    fill: f.properties.fill,
+    valid: parseSpcTimestamp(f.properties.valid),
+    expire: parseSpcTimestamp(f.properties.expire),
+    issue: parseSpcTimestamp(f.properties.issue),
+    geometry: f.geometry,
+  }));
 }
 
 type Ring = [number, number][]; // GeoJSON [lon, lat] pairs

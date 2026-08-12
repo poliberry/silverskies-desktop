@@ -129,6 +129,24 @@ function AlertPolygonsLayer({ host }: { host: string }) {
   );
 }
 
+const SPC_OUTLOOK_PANE = "spc-outlook-pane";
+
+/** Creates a dedicated pane for the outlook overlay, just under Leaflet's
+ * default `overlayPane` (z-index 400, where AlertPolygonsLayer's polygons
+ * render) — panes stack by explicit z-index regardless of DOM/mount order,
+ * so this reliably keeps the broad, filled outlook polygons from stealing
+ * clicks meant for a smaller severe-alert polygon layered on top of them,
+ * even though which layer's data resolves (and mounts) first varies with
+ * network timing. */
+function useOutlookPane() {
+  const map = useMap();
+  useEffect(() => {
+    if (map.getPane(SPC_OUTLOOK_PANE)) return;
+    const pane = map.createPane(SPC_OUTLOOK_PANE);
+    pane.style.zIndex = "399";
+  }, [map]);
+}
+
 /**
  * SPC Day 1 Categorical Outlook overlay — outlined in the same style as
  * AlertPolygonsLayer above, colored from each polygon's own official SPC
@@ -138,6 +156,7 @@ function AlertPolygonsLayer({ host }: { host: string }) {
  * CONUS layer is only ever a handful of polygons.
  */
 function SpcOutlookLayer({ enabled }: { enabled: boolean }) {
+  useOutlookPane();
   const { data } = useSpcOutlook(enabled);
   const outlooks = enabled ? (data ?? []) : [];
 
@@ -156,7 +175,14 @@ function SpcOutlookLayer({ enabled }: { enabled: boolean }) {
 
   return (
     <GeoJSON
-      key={outlooks.map((o) => o.code).join(",")}
+      // Keyed by code *and* issue time — the outlook only ever reuses the
+      // same handful of category codes, so keying on code alone means a
+      // refetch that brings back newly issued (re-shaped) polygons for the
+      // same categories wouldn't remount the layer: react-leaflet's GeoJSON
+      // doesn't diff the `data` prop after mount, so the stale geometry
+      // would stick around silently until something else forced a remount.
+      key={outlooks.map((o) => `${o.code}:${o.issue}`).join(",")}
+      pane={SPC_OUTLOOK_PANE}
       data={featureCollection}
       style={(feature) => ({
         color: feature?.properties?.stroke ?? "#888888",
