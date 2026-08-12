@@ -5,6 +5,8 @@ import { RightSidebar } from "@/components/layout/RightSidebar";
 import { useWeather } from "@/hooks/useWeather";
 import { useSettings } from "@/hooks/useSettings";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { WindowControlButtons } from "@/components/layout/WindowControlButtons";
 import { ipc } from "@/lib/ipc-client";
 import { ProviderConfigError } from "@/lib/providers";
 import type { WindowLocation } from "@/types/windows";
@@ -32,6 +34,8 @@ export function ConditionsWindow({ initialLocation }: ConditionsWindowProps) {
 
   useEffect(() => ipc.windows.onInstanceLocation(setLocation), []);
 
+  useDocumentTitle(location ? `${location.label} - Conditions - Silver Skies` : "Conditions - Silver Skies");
+
   const unit: UnitPref = config?.units ?? "F";
   const timeFormat = config?.timeFormat ?? "12";
 
@@ -43,11 +47,15 @@ export function ConditionsWindow({ initialLocation }: ConditionsWindowProps) {
         : null;
 
   return (
-    <div className="flex h-screen flex-col gap-2 p-3" style={{ background: "var(--bg)" }}>
-      <div className="glass-card px-3 py-1.5 font-mono text-xs" style={{ color: "var(--text2)" }}>
-        {location?.label ?? "Waiting for radar location…"}
+    <div className="flex h-screen flex-col" style={{ background: "var(--bg)" }}>
+      <div
+        className="drag-region flex items-center justify-between gap-2 font-mono text-xs"
+        style={{ padding: "3px 8px", color: "var(--text2)" }}
+      >
+        <span className="truncate">{location?.label ?? "Waiting for radar location…"}</span>
+        <WindowControlButtons iconSize={11} />
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 p-3" style={{ paddingTop: 0 }}>
         <RightSidebar
           weather={weatherQuery.data}
           isLoading={weatherQuery.isLoading}

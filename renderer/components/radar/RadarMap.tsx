@@ -35,7 +35,7 @@ export interface RadarMapProps {
    * Each instance gets its own independent settings object. */
   settings: RadarSettings;
   /** False when a pop-out window's alt bar (RadarWindowToolbar) is already
-   * rendering RadarSettingsControls — the under-map bar then shows only
+   * rendering RadarSettingsDropdowns — the under-map bar then shows only
    * playback controls instead of duplicating them. Defaults to true. */
   renderSettingsInline?: boolean;
 }

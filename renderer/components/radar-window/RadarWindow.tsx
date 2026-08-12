@@ -7,6 +7,7 @@ import { RadarWindowToolbar } from "./RadarWindowToolbar";
 import { useRadarSettings } from "@/hooks/useRadarSettings";
 import { useSettings } from "@/hooks/useSettings";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { geocode, reverseGeocode, DEFAULT_LOCATION } from "@/lib/geocode";
 import { ipGeolocate } from "@/lib/ip-geolocate";
 import { fetchWeatherMaps } from "@/lib/alerts/librewxr";
@@ -78,6 +79,13 @@ export function RadarWindow({ instanceId, initialLocation }: RadarWindowProps) {
     }
   }
 
+  const currentSchemeName = weatherMaps?.radar.colorSchemes.find((s) => s.id === settings.colorScheme)?.name;
+  useDocumentTitle(
+    location
+      ? `${location.label} - Radar${currentSchemeName ? ` (${currentSchemeName})` : ""} - Silver Skies`
+      : "Radar - Silver Skies",
+  );
+
   function handleGps() {
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
     setIsLocating(true);
@@ -100,7 +108,7 @@ export function RadarWindow({ instanceId, initialLocation }: RadarWindowProps) {
   }
 
   return (
-    <div className="flex h-screen flex-col gap-3 p-3" style={{ background: "var(--bg)" }}>
+    <div className="flex h-screen flex-col" style={{ background: "var(--bg)" }}>
       <RadarWindowToolbar
         instanceId={instanceId}
         location={location}

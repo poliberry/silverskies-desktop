@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { AlertDetailContent } from "@/components/alerts/AlertDetailContent";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { WindowControlButtons } from "@/components/layout/WindowControlButtons";
 import { ipc } from "@/lib/ipc-client";
 import type { NormalizedAlert } from "@/types/alerts";
 
@@ -31,14 +33,18 @@ export function AlertWindow({ token }: AlertWindowProps) {
     };
   }, [token]);
 
+  useDocumentTitle(alert ? `${alert.displayEvent} - Alert - Silver Skies` : "Alert - Silver Skies");
+
   return (
-    <div
-      className={`flex h-screen flex-col overflow-y-auto thin-scroll p-6 ${alert?.cssClass ?? ""}`}
-      style={{ background: "var(--bg)" }}
-    >
-      {alert === undefined && <div className="loading-text">Loading alert…</div>}
-      {alert === null && <div className="error-box">⚠ This alert is no longer available.</div>}
-      {alert && <AlertDetailContent alert={alert} />}
+    <div className={`flex h-screen flex-col ${alert?.cssClass ?? ""}`} style={{ background: "var(--bg)" }}>
+      <div className="drag-region flex flex-shrink-0 items-center justify-end" style={{ padding: "3px 8px" }}>
+        <WindowControlButtons iconSize={11} />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto thin-scroll p-6">
+        {alert === undefined && <div className="loading-text">Loading alert…</div>}
+        {alert === null && <div className="error-box">⚠ This alert is no longer available.</div>}
+        {alert && <AlertDetailContent alert={alert} />}
+      </div>
     </div>
   );
 }

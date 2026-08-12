@@ -25,7 +25,7 @@ function frameLabel(frame: LibreWxrFrame | undefined, isForecast: boolean): stri
  * radar instance keeps under its own map, whether that's the docked map in
  * the main window or a pop-out RadarWindow. Split out of the old
  * RadarControls so a pop-out window's alt bar can host the *other* half
- * (RadarSettingsControls) without duplicating this row.
+ * (RadarSettingsDropdowns) without duplicating this row.
  */
 export function RadarPlaybackBar({
   frames,

@@ -50,6 +50,19 @@ export function Shell() {
   // the audit log the full column instead of sharing it with the map.
   const [radarPoppedOut, setRadarPoppedOut] = useState(false);
   useEffect(() => ipc.windows.onPrimaryRadarClosed(() => setRadarPoppedOut(false)), []);
+  // Shell's own state always starts at `false` on mount, but the actual
+  // pop-out window can already exist — surviving a main-window reload, or
+  // recreated from session.json on relaunch — so ask main for the real
+  // state instead of assuming docked.
+  useEffect(() => {
+    let cancelled = false;
+    void ipc.windows.isPrimaryRadarOpen().then((open) => {
+      if (!cancelled && open) setRadarPoppedOut(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [demoAlerts, setDemoAlerts] = useState<NormalizedAlert[]>([]);
   // The asteroid easter egg forces a specific pulse color directly rather
   // than deriving one from alert classification (it isn't a real hazard
@@ -127,12 +140,11 @@ export function Shell() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: "var(--bg)" }}>
-      {/* #top-glow (app/layout.tsx) is a fixed strip right at the window's
-          top edge with a soft blur that reaches past its own 4px height —
-          this top padding just gives it room to fade out before reaching
-          the TopBar's text, without covering the glow itself (it needs to
-          stay visible, just not wash over the row below it). */}
-      <div className="px-4 pt-6 pb-2">
+      {/* Only the main window gets the animated gradient sweep — pop-out
+          radar/conditions/alert windows render their own root component
+          instead of Shell, so they never pick this up. */}
+      <div id="top-glow" />
+      <div style={{ padding: "12px 12px 0" }}>
         <TopBar
           locationLabel={active?.label ?? "—"}
           locationSub={

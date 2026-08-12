@@ -1,7 +1,8 @@
 "use client";
 
-import { LocationSearch } from "@/components/locations/LocationSearch";
-import { RadarSettingsControls } from "@/components/radar/RadarSettingsControls";
+import { useState } from "react";
+import { RadarSettingsDropdowns } from "@/components/radar/RadarSettingsDropdowns";
+import { WindowControlButtons } from "@/components/layout/WindowControlButtons";
 import { ipc } from "@/lib/ipc-client";
 import type { RadarSettings } from "@/hooks/useRadarSettings";
 import type { LibreWxrColorScheme } from "@/lib/alerts/librewxr";
@@ -21,13 +22,28 @@ export interface RadarWindowToolbarProps {
   colorSchemes: LibreWxrColorScheme[];
 }
 
+// Icon-only actions — no visible label, just a title/aria-label tooltip —
+// to keep the bar as thin as possible.
+const iconBtnStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 18,
+  height: 18,
+  padding: 0,
+  background: "none",
+  border: "none",
+  color: "var(--text3)",
+  cursor: "pointer",
+};
+
 /**
- * The pop-out radar window's "alt bar" — location search plus every radar
- * *setting* (type/arrows/cells/polygons/overlays), lifted up here out of
- * the under-map control bar (which keeps only play/seek/live — see
- * RadarPlaybackBar). Also where a radar window spawns further windows:
- * another fully independent radar instance, or a Conditions window paired
- * to this one.
+ * The pop-out radar window's "alt bar" — a flat, ~18px-tall single-line
+ * strip: location search, every radar *setting* (type/arrows/cells/
+ * polygons/overlays, as compact dropdowns — see RadarSettingsDropdowns),
+ * and icon actions that spawn further windows. Deliberately chrome-less
+ * (no card background/border/padding) — this is scoped to the pop-out
+ * window only, the main docked window's controls are unaffected.
  */
 export function RadarWindowToolbar({
   instanceId,
@@ -40,52 +56,81 @@ export function RadarWindowToolbar({
   overlaysAvailable,
   colorSchemes,
 }: RadarWindowToolbarProps) {
+  const [query, setQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!query.trim() || isSearching) return;
+    setIsSearching(true);
+    try {
+      await onSearch(query.trim());
+    } finally {
+      setIsSearching(false);
+    }
+  }
+
   return (
-    <div className="glass-card flex flex-wrap items-start gap-4 p-3">
-      <div className="w-64 flex-shrink-0">
-        <LocationSearch onSearch={onSearch} onGps={onGps} isLocating={isLocating} error={searchError} />
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <RadarSettingsControls
-          colorSchemes={colorSchemes}
-          colorScheme={settings.colorScheme}
-          onColorSchemeChange={settings.setColorScheme}
-          showArrows={settings.showArrows}
-          onToggleArrows={settings.toggleArrows}
-          showCells={settings.showCells}
-          onToggleCells={settings.toggleCells}
-          showPolygons={settings.showPolygons}
-          onTogglePolygons={settings.togglePolygons}
-          showWindOverlay={settings.showWindOverlay}
-          onToggleWindOverlay={settings.toggleWindOverlay}
-          showTempOverlay={settings.showTempOverlay}
-          onToggleTempOverlay={settings.toggleTempOverlay}
-          showPrecipOverlay={settings.showPrecipOverlay}
-          onTogglePrecipOverlay={settings.togglePrecipOverlay}
-          showAqiOverlay={settings.showAqiOverlay}
-          onToggleAqiOverlay={settings.toggleAqiOverlay}
-          overlaysAvailable={overlaysAvailable}
+    <div className="drag-region flex flex-nowrap items-center gap-2 overflow-x-auto" style={{ padding: "3px 8px" }}>
+      <form className="no-drag flex flex-shrink-0 items-center gap-1" onSubmit={handleSubmit}>
+        <input
+          type="text"
+          placeholder="Search city…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          title={searchError ?? undefined}
+          aria-invalid={Boolean(searchError)}
+          style={{
+            height: 18,
+            width: 150,
+            padding: "0 4px",
+            border: "none",
+            background: "none",
+            color: "var(--text)",
+            fontSize: "0.7rem",
+            fontFamily: "var(--mono)",
+            outline: "none",
+          }}
         />
+        <button
+          type="button"
+          onClick={onGps}
+          title="Use my GPS location"
+          aria-label="Use my GPS location"
+          style={iconBtnStyle}
+          className={isLocating ? "locating" : undefined}
+        >
+          <i className="ph ph-navigation-arrow" aria-hidden="true" style={{ fontSize: "0.85rem" }} />
+        </button>
+      </form>
+
+      <div className="no-drag">
+        <RadarSettingsDropdowns colorSchemes={colorSchemes} settings={settings} overlaysAvailable={overlaysAvailable} />
       </div>
 
-      <div className="flex flex-shrink-0 items-center gap-2">
+      <div className="no-drag flex flex-shrink-0 items-center gap-1" style={{ marginLeft: "auto" }}>
         <button
-          className="unit-btn"
+          type="button"
           onClick={() => void ipc.windows.openRadar()}
           title="Open another, completely independent radar instance"
+          aria-label="New radar window"
+          style={iconBtnStyle}
         >
-          New Radar Window
+          <i className="ph ph-plus-square" aria-hidden="true" style={{ fontSize: "0.9rem" }} />
         </button>
         <button
-          className="unit-btn"
+          type="button"
           disabled={!location}
           onClick={() => location && void ipc.windows.openConditions({ instanceId, location })}
           title="Open a current-conditions window tracking this radar's location"
+          aria-label="Open conditions window"
+          style={{ ...iconBtnStyle, opacity: location ? 1 : 0.4, cursor: location ? "pointer" : "not-allowed" }}
         >
-          Open Conditions
+          <i className="ph ph-cloud-sun" aria-hidden="true" style={{ fontSize: "0.9rem" }} />
         </button>
       </div>
+
+      <WindowControlButtons iconSize={11} />
     </div>
   );
 }

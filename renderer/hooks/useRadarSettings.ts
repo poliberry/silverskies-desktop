@@ -6,7 +6,7 @@ import { useState } from "react";
  * Deliberately separate from playback state (selectedIndex/isPlaying, which
  * stay local to LeafletRadarMap) because these are the controls that move
  * up into a pop-out radar window's alt bar (RadarWindowToolbar) instead of
- * staying in the under-map control bar — see RadarSettingsControls.tsx.
+ * staying in the under-map control bar — see RadarSettingsDropdowns.tsx.
  *
  * Each radar instance (the docked map in Shell, or any pop-out RadarWindow)
  * owns its own independent useRadarSettings() call — nothing here is

@@ -235,6 +235,10 @@ export function LeafletRadarMap({
 }: RadarMapProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  // Only relevant when !renderSettingsInline (a pop-out radar window) —
+  // starts collapsed so the map gets as much of the window as possible;
+  // see the "Playback" toggle strip in the render below.
+  const [showPlaybackBar, setShowPlaybackBar] = useState(false);
   const { colorScheme, showArrows, showCells, showPolygons } = settings;
 
   // Config (and therefore the OpenWeatherMap key) is app-wide IPC-backed
@@ -408,36 +412,46 @@ export function LeafletRadarMap({
             isLive={isLive}
             onJumpToLive={() => setSelectedIndex(latestObservedIndex)}
             colorSchemes={weatherMaps?.radar.colorSchemes ?? []}
-            colorScheme={colorScheme}
-            onColorSchemeChange={settings.setColorScheme}
-            showArrows={showArrows}
-            onToggleArrows={settings.toggleArrows}
-            showCells={showCells}
-            onToggleCells={settings.toggleCells}
-            showPolygons={showPolygons}
-            onTogglePolygons={settings.togglePolygons}
-            showWindOverlay={settings.showWindOverlay}
-            onToggleWindOverlay={settings.toggleWindOverlay}
-            showTempOverlay={settings.showTempOverlay}
-            onToggleTempOverlay={settings.toggleTempOverlay}
-            showPrecipOverlay={settings.showPrecipOverlay}
-            onTogglePrecipOverlay={settings.togglePrecipOverlay}
-            showAqiOverlay={settings.showAqiOverlay}
-            onToggleAqiOverlay={settings.toggleAqiOverlay}
+            settings={settings}
             overlaysAvailable={overlaysAvailable}
           />
         ) : (
-          <div className="glass-card flex flex-col gap-2 p-3">
-            <RadarPlaybackBar
-              frames={frames}
-              nowcastStartIndex={nowcastStartIndex}
-              selectedIndex={selectedIndex}
-              onSelectIndex={setSelectedIndex}
-              isPlaying={isPlaying}
-              onTogglePlay={() => setIsPlaying((v) => !v)}
-              isLive={isLive}
-              onJumpToLive={() => setSelectedIndex(latestObservedIndex)}
-            />
+          // Pop-out windows: playback collapses to a slim toggle strip by
+          // default (so the map gets as much of the window as possible) and
+          // expands in place when clicked — never floats over the map.
+          <div className="flex flex-col" style={{ padding: "4px 8px" }}>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-2"
+              style={{ height: 18, background: "none", border: "none", padding: 0, color: "inherit", cursor: "pointer", font: "inherit" }}
+              onClick={() => setShowPlaybackBar((v) => !v)}
+              aria-expanded={showPlaybackBar}
+            >
+              <span className="flex items-center gap-1.5 font-mono" style={{ fontSize: "0.7rem", color: "var(--text3)" }}>
+                <i className="ph ph-clock-counter-clockwise" aria-hidden="true" />
+                Playback
+                {isLive && (
+                  <span style={{ color: "var(--danger)" }} className="tracking-wider">
+                    · LIVE
+                  </span>
+                )}
+              </span>
+              <i className={`ph ph-caret-${showPlaybackBar ? "down" : "up"}`} aria-hidden="true" style={{ fontSize: "0.7rem" }} />
+            </button>
+            {showPlaybackBar && (
+              <div style={{ paddingTop: 6 }}>
+                <RadarPlaybackBar
+                  frames={frames}
+                  nowcastStartIndex={nowcastStartIndex}
+                  selectedIndex={selectedIndex}
+                  onSelectIndex={setSelectedIndex}
+                  isPlaying={isPlaying}
+                  onTogglePlay={() => setIsPlaying((v) => !v)}
+                  isLive={isLive}
+                  onJumpToLive={() => setSelectedIndex(latestObservedIndex)}
+                />
+              </div>
+            )}
           </div>
         ))}
     </div>
