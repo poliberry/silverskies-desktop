@@ -1,5 +1,8 @@
 import type { ConfigFile, LocationsFile, SavedLocation } from "@/types/settings";
+import type { AppInfo, UpdaterStatus } from "@/types/updater";
 import "@/types/ipc";
+
+const DEFAULT_APP_INFO: AppInfo = { version: "dev", electron: "-", chrome: "-", node: "-", platform: "-", arch: "-" };
 
 const DEFAULT_LOCATIONS: LocationsFile = { savedLocations: [], activeLocationId: null };
 
@@ -68,6 +71,10 @@ export const ipc = {
       if (!window.silverSkies) return "dev";
       return window.silverSkies.app.getVersion();
     },
+    async getInfo(): Promise<AppInfo> {
+      if (!window.silverSkies) return DEFAULT_APP_INFO;
+      return window.silverSkies.app.getInfo();
+    },
     async openExternal(url: string): Promise<void> {
       if (!window.silverSkies) { window.open(url, "_blank"); return; }
       return window.silverSkies.app.openExternal(url);
@@ -87,6 +94,29 @@ export const ipc = {
         return;
       }
       return window.silverSkies.app.notify(title, body);
+    },
+  },
+  updater: {
+    async check(): Promise<void> {
+      if (!window.silverSkies) { warnNoBridge(); return; }
+      return window.silverSkies.updater.check();
+    },
+    async install(): Promise<void> {
+      if (!window.silverSkies) { warnNoBridge(); return; }
+      return window.silverSkies.updater.install();
+    },
+    async getStatus(): Promise<UpdaterStatus> {
+      if (!window.silverSkies) return { state: "unsupported" };
+      return window.silverSkies.updater.getStatus();
+    },
+    onStatus(callback: (status: UpdaterStatus) => void): () => void {
+      if (!window.silverSkies) {
+        // Browser-preview fallback — updates only ever exist in a packaged
+        // Electron build, so there's nothing to subscribe to here.
+        callback({ state: "unsupported" });
+        return () => {};
+      }
+      return window.silverSkies.updater.onStatus(callback);
     },
   },
 };

@@ -40,6 +40,27 @@ export const DEFAULT_LOCATIONS: LocationsFile = {
   activeLocationId: null,
 };
 
+export interface AppInfo {
+  version: string;
+  electron: string;
+  chrome: string;
+  node: string;
+  platform: string;
+  arch: string;
+}
+
+export type UpdaterStatus =
+  | { state: "idle" }
+  | { state: "checking" }
+  | { state: "available"; version: string }
+  | { state: "not-available" }
+  | { state: "downloading"; percent: number }
+  | { state: "downloaded"; version: string }
+  | { state: "error"; message: string }
+  // Unpackaged/dev builds have no update feed — surfaced distinctly from a
+  // real check failure so the About tab can explain rather than alarm.
+  | { state: "unsupported" };
+
 export const DEFAULT_CONFIG: ConfigFile = {
   provider: "open-meteo",
   accuWeatherApiKey: null,

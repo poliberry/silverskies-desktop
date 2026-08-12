@@ -121,6 +121,11 @@ builds only) and `publish.owner`/`publish.repo` in `package.json` point at this 
 builds will check this repo's GitHub Releases on launch and update themselves once you publish a
 release with a higher version than what's installed.
 
+Settings → About also exposes a manual "Check for Updates" button and shows live status (checking,
+downloading with percent, downloaded/ready-to-install with a "Restart & Install" button, or a plain
+explanation when running an unpackaged/dev build, which has no update feed at all) — `main.ts`
+forwards `electron-updater`'s own events over IPC for this rather than duplicating its logic.
+
 ### App icon
 
 `assets/icon-light.png` / `assets/icon-dark.png` — the window/taskbar icon swaps between them

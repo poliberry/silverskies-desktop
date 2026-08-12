@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { ConfigFile, LocationsFile, SavedLocation } from "./types";
+import type { AppInfo, ConfigFile, LocationsFile, SavedLocation, UpdaterStatus } from "./types";
 
 /**
  * Narrow, typed bridge exposed to the renderer as `window.silverSkies`.
@@ -23,10 +23,21 @@ const api = {
   },
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke("app:getVersion"),
+    getInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:getInfo"),
     openExternal: (url: string): Promise<void> => ipcRenderer.invoke("app:openExternal", url),
     setOverlayIcon: (dataUrl: string | null, description: string): Promise<void> =>
       ipcRenderer.invoke("app:setOverlayIcon", dataUrl, description),
     notify: (title: string, body: string): Promise<void> => ipcRenderer.invoke("app:notify", title, body),
+  },
+  updater: {
+    check: (): Promise<void> => ipcRenderer.invoke("updater:check"),
+    install: (): Promise<void> => ipcRenderer.invoke("updater:install"),
+    getStatus: (): Promise<UpdaterStatus> => ipcRenderer.invoke("updater:getStatus"),
+    onStatus: (callback: (status: UpdaterStatus) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, status: UpdaterStatus) => callback(status);
+      ipcRenderer.on("updater:status", listener);
+      return () => ipcRenderer.removeListener("updater:status", listener);
+    },
   },
 };
 
