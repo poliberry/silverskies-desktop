@@ -4,8 +4,10 @@ import { useMemo, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { AlertSource, NormalizedAlert } from "@/types/alerts";
 import type { TodayOutlook } from "@/lib/forecast-outlook";
+import type { SpcOutlookFeature } from "@/lib/alerts/spc-outlook";
 import { AlertRow } from "./AlertRow";
 import { TodayOutlookRow } from "./TodayOutlookRow";
+import { SpcOutlookBanner } from "./SpcOutlookBanner";
 
 const SEVERITIES = ["Extreme", "Severe", "Moderate", "Minor"] as const;
 const SOURCE_LABEL: Record<AlertSource, string> = {
@@ -21,9 +23,10 @@ interface AlertLogProps {
   isLoading?: boolean;
   demoAlerts?: NormalizedAlert[];
   todayOutlook?: TodayOutlook | null;
+  spcOutlook?: SpcOutlookFeature | null;
 }
 
-export function AlertLog({ alerts, isLoading, demoAlerts = [], todayOutlook }: AlertLogProps) {
+export function AlertLog({ alerts, isLoading, demoAlerts = [], todayOutlook, spcOutlook }: AlertLogProps) {
   const [severityFilter, setSeverityFilter] = useState<Set<string>>(new Set());
   const [sourceFilter, setSourceFilter] = useState<Set<AlertSource>>(new Set());
 
@@ -76,6 +79,7 @@ export function AlertLog({ alerts, isLoading, demoAlerts = [], todayOutlook }: A
         </div>
       </div>
 
+      {spcOutlook && <SpcOutlookBanner outlook={spcOutlook} />}
       {todayOutlook && <TodayOutlookRow outlook={todayOutlook} />}
 
       <ScrollArea className="flex-1 min-h-0">

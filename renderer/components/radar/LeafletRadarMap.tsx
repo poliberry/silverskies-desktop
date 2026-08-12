@@ -16,6 +16,7 @@ import { fetchSpcMdAlerts } from "@/lib/alerts/spc-md";
 import { resolveAlertColor } from "@/lib/alerts/color.client";
 import { preloadRadarFrame } from "@/lib/radar-preload";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useSpcOutlook } from "@/hooks/useSpcOutlook";
 import type { RadarMapProps } from "./RadarMap";
 import { RadarControls } from "./RadarControls";
 import { RadarLegend } from "./RadarLegend";
@@ -128,7 +129,88 @@ function AlertPolygonsLayer({ host }: { host: string }) {
   );
 }
 
-export function LeafletRadarMap({ lat, lon, label, libreWxrHost, theme, preloadLocations }: RadarMapProps) {
+const SPC_OUTLOOK_PANE = "spc-outlook-pane";
+
+/** Creates a dedicated pane for the outlook overlay, just under Leaflet's
+ * default `overlayPane` (z-index 400, where AlertPolygonsLayer's polygons
+ * render) — panes stack by explicit z-index regardless of DOM/mount order,
+ * so this reliably keeps the broad, filled outlook polygons from stealing
+ * clicks meant for a smaller severe-alert polygon layered on top of them,
+ * even though which layer's data resolves (and mounts) first varies with
+ * network timing.
+ *
+ * Deliberately synchronous (called during render, not from an effect):
+ * React fires a component's own effects *after* its children's, so if this
+ * ran in a useEffect here it could still lose the race against <GeoJSON>'s
+ * own mount effect — e.g. when useSpcOutlook already has cached data (map
+ * remounted, tab revisited, ...) and <GeoJSON> attaches to the map in the
+ * very same commit. Leaflet then tries to render into a pane that doesn't
+ * exist yet and throws. `map.createPane` is idempotent (guarded below) and
+ * doesn't touch React state, so doing it inline is safe. */
+function ensureOutlookPane(map: L.Map) {
+  if (map.getPane(SPC_OUTLOOK_PANE)) return;
+  const pane = map.createPane(SPC_OUTLOOK_PANE);
+  pane.style.zIndex = "399";
+}
+
+/**
+ * SPC Day 1 Categorical Outlook overlay — outlined in the same style as
+ * AlertPolygonsLayer above, colored from each polygon's own official SPC
+ * stroke/fill hex (see spc-outlook.ts) rather than resolveAlertColor's
+ * `.alert-*` CSS taxonomy, since there's no per-category class for this.
+ * Unlike AlertPolygonsLayer, this isn't bbox/viewport-scoped — the whole
+ * CONUS layer is only ever a handful of polygons.
+ */
+function SpcOutlookLayer({ enabled }: { enabled: boolean }) {
+  const map = useMap();
+  ensureOutlookPane(map);
+  const { data } = useSpcOutlook(enabled);
+  const outlooks = enabled ? (data ?? []) : [];
+
+  if (!outlooks.length) return null;
+
+  const featureCollection: FeatureCollection = {
+    type: "FeatureCollection",
+    features: outlooks.map(
+      (o): Feature => ({
+        type: "Feature",
+        geometry: o.geometry as Feature["geometry"],
+        properties: { code: o.code, name: o.name, stroke: o.stroke, fill: o.fill },
+      }),
+    ),
+  };
+
+  return (
+    <GeoJSON
+      // Keyed by code *and* issue time — the outlook only ever reuses the
+      // same handful of category codes, so keying on code alone means a
+      // refetch that brings back newly issued (re-shaped) polygons for the
+      // same categories wouldn't remount the layer: react-leaflet's GeoJSON
+      // doesn't diff the `data` prop after mount, so the stale geometry
+      // would stick around silently until something else forced a remount.
+      key={outlooks.map((o) => `${o.code}:${o.issue}`).join(",")}
+      pane={SPC_OUTLOOK_PANE}
+      data={featureCollection}
+      style={(feature) => ({
+        color: feature?.properties?.stroke ?? "#888888",
+        weight: 1.5,
+        fillColor: feature?.properties?.fill ?? "#888888",
+        fillOpacity: 0.18,
+      })}
+      onEachFeature={(feature, layer) => {
+        const p = feature.properties ?? {};
+        layer.bindPopup(
+          `<div style="font-family:var(--mono);min-width:180px;">
+            <strong style="text-transform:uppercase;letter-spacing:.05em;font-size:.8rem;">${escapeHtml(String(p.name ?? "SPC Outlook"))}</strong>
+          </div>`,
+          { autoPan: false },
+        );
+      }}
+    />
+  );
+}
+
+export function LeafletRadarMap({ lat, lon, label, libreWxrHost, theme, preloadLocations, spcOutlookEnabled }: RadarMapProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [colorScheme, setColorScheme] = useState(1);
@@ -245,6 +327,7 @@ export function LeafletRadarMap({ lat, lon, label, libreWxrHost, theme, preloadL
           <TileLayer url={theme === "light" ? CARTO_LIGHT : CARTO_DARK} attribution={CARTO_ATTRIB} />
           <RadarTileCrossfade url={debouncedRadarUrl} targetOpacity={0.75} zIndex={5} />
           <AlertPolygonsLayer host={libreWxrHost} />
+          <SpcOutlookLayer enabled={spcOutlookEnabled} />
           <Marker position={[lat, lon]} icon={locationIcon} />
           <RecenterOnLocationChange lat={lat} lon={lon} />
         </MapContainer>

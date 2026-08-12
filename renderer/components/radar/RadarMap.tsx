@@ -27,6 +27,8 @@ export interface RadarMapProps {
   /** Preloaded in the background (radar tiles warmed at a fixed zoom) so
    * switching to one of these feels instant. */
   preloadLocations?: { lat: number; lon: number }[];
+  /** Settings toggle for the SPC Day 1 Categorical Outlook overlay. */
+  spcOutlookEnabled: boolean;
 }
 
 export function RadarMap(props: RadarMapProps) {

@@ -66,7 +66,13 @@ export const accuWeatherProvider: WeatherProvider = {
     const daily: DailyPoint[] = (daily5.DailyForecasts as any[]).map((d) => {
       const uvEntry = (d.AirAndPollen as any[] | undefined)?.find((p) => p.Name === "UVIndex");
       return {
-        date: d.Date,
+        // AccuWeather's `Date` is a full ISO datetime in the location's own
+        // offset (e.g. "2026-08-13T07:00:00-05:00") — DailyPoint.date (and
+        // fmtDayLabel, which appends "T00:00:00" to it) expects a bare
+        // "YYYY-MM-DD" like Open-Meteo's `daily.time` provides. Slicing
+        // avoids re-parsing into a Date and risking a shift from the
+        // browser's own timezone.
+        date: d.Date.slice(0, 10),
         weatherCode: accuWeatherIconToWmo(d.Day.Icon),
         tempMaxC: d.Temperature.Maximum.Value,
         tempMinC: d.Temperature.Minimum.Value,
