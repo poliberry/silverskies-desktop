@@ -16,7 +16,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { AboutPanel } from "./AboutPanel";
 import { DevToolsPanel } from "./DevToolsPanel";
 import type { NormalizedAlert } from "@/types/alerts";
-import type { ThemePref, TimeFormatPref, UnitPref, WeatherProviderId } from "@/types/settings";
+import type { ThemePref, TimeFormatPref, UiModePref, UnitPref, WeatherProviderId } from "@/types/settings";
 
 const REFRESH_OPTIONS = [
   { label: "5M", value: 5 },
@@ -45,13 +45,15 @@ export function SettingsDialog({
   const { config, updateConfig } = useSettings();
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [willyWeatherKeyDraft, setWillyWeatherKeyDraft] = useState("");
+  const [owmKeyDraft, setOwmKeyDraft] = useState("");
   const [hostDraft, setHostDraft] = useState("");
 
   useEffect(() => {
     setApiKeyDraft(config?.accuWeatherApiKey ?? "");
     setWillyWeatherKeyDraft(config?.willyWeatherApiKey ?? "");
+    setOwmKeyDraft(config?.openWeatherMapApiKey ?? "");
     setHostDraft(config?.libreWxrHost ?? "https://api.librewxr.net");
-  }, [config?.accuWeatherApiKey, config?.willyWeatherApiKey, config?.libreWxrHost]);
+  }, [config?.accuWeatherApiKey, config?.willyWeatherApiKey, config?.openWeatherMapApiKey, config?.libreWxrHost]);
 
   if (!config) return null;
 
@@ -196,6 +198,28 @@ export function SettingsDialog({
                 checked across all of your saved locations, not just the one on screen.
               </p>
             </div>
+
+            <div className="settings-bar-section">
+              <div className="settings-bar-label">INTERFACE</div>
+              <div className="settings-bar-group">
+                {(["classic", "advanced"] as UiModePref[]).map((m) => (
+                  <button
+                    key={m}
+                    className={`unit-btn ${config.uiMode === m ? "active" : ""}`}
+                    onClick={() => updateConfig({ uiMode: m })}
+                  >
+                    {m === "classic" ? "Classic" : "Advanced"}
+                  </button>
+                ))}
+              </div>
+              <p className="font-mono text-[0.68rem]" style={{ color: "var(--text3)" }}>
+                Classic is this single-window layout. Advanced adds a &quot;Pop Out&quot;/&quot;New Window&quot;
+                pair next to the refresh button, letting you undock the radar into its own window — with a
+                search bar and its own settings — and open as many independent radar and current-conditions
+                windows as you like. Advanced mode also restores whichever radar/conditions windows you had
+                open the next time you launch the app.
+              </p>
+            </div>
           </TabsContent>
 
           <TabsContent value="sources" className="flex flex-col gap-5 pt-4">
@@ -227,6 +251,24 @@ export function SettingsDialog({
               />
               <p className="font-mono text-[0.68rem]" style={{ color: "var(--text3)" }}>
                 Defaults to the public instance. Point this at your own self-hosted LibreWXR server if you run one.
+              </p>
+            </div>
+
+            <div className="settings-bar-section">
+              <div className="settings-bar-label">OPENWEATHERMAP API KEY (RADAR OVERLAYS)</div>
+              <input
+                id="owm-key"
+                className="search-input"
+                type="password"
+                placeholder="Paste your OpenWeatherMap API key"
+                value={owmKeyDraft}
+                onChange={(e) => setOwmKeyDraft(e.target.value)}
+                onBlur={() => updateConfig({ openWeatherMapApiKey: owmKeyDraft.trim() || null })}
+              />
+              <p className="font-mono text-[0.68rem]" style={{ color: "var(--text3)" }}>
+                Stored locally in config.json — never sent anywhere but OpenWeatherMap. Powers the Wind/
+                Temp/Precip/AQI toggles on the radar (main window and every radar window). Free tier
+                available at openweathermap.org/api. Left blank, those toggles are disabled.
               </p>
             </div>
 
