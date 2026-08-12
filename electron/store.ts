@@ -38,11 +38,19 @@ async function readJsonWithDefault<T>(filePath: string, fallback: T): Promise<T>
 class JsonStore<T extends object> {
   private cache: T | null = null;
   private writeQueue: Promise<void> = Promise.resolve();
+  // Serializes the whole read-modify-write cycle of update() — without this,
+  // two update() calls fired close together (e.g. blurring one Settings
+  // field while clicking another) can both read the same pre-mutation cache
+  // before either has written, so the one that writes last silently
+  // clobbers the other's patch instead of merging with it.
+  private updateQueue: Promise<T>;
 
   constructor(
     private readonly fileName: string,
     private readonly fallback: T,
-  ) {}
+  ) {
+    this.updateQueue = Promise.resolve(fallback);
+  }
 
   private filePath(): string {
     return path.join(userDataDir(), this.fileName);
@@ -65,9 +73,17 @@ class JsonStore<T extends object> {
   }
 
   async update(mutator: (current: T) => T): Promise<T> {
-    const current = await this.read();
-    const next = mutator(current);
-    return this.write(next);
+    const task = this.updateQueue.then(async () => {
+      const current = await this.read();
+      const next = mutator(current);
+      return this.write(next);
+    });
+    // If this write fails, keep the chain alive for the *next* update() call
+    // (falling back to the last-known-good cache) instead of leaving every
+    // future update() permanently rejected — but still let this call's own
+    // caller see the failure via the unswallowed `task` returned below.
+    this.updateQueue = task.catch(() => this.cache ?? this.fallback);
+    return task;
   }
 }
 

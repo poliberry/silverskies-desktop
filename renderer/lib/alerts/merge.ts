@@ -48,7 +48,12 @@ export async function fetchMergedAlerts(
   if (isCa) tasks.push(fetchEcccAlerts(lat, lon));
   if (isAu) tasks.push(fetchBomAlerts(lat, lon, willyWeatherApiKey));
   if (isUs) tasks.push(fetchSpcMdAlerts(bbox));
-  if (!isUs && !isCa && !isAu) tasks.push(fetchLibreWxrAlerts(libreWxrHost, bbox));
+  // LibreWXR is the global fallback for everywhere NWS/ECCC don't cover —
+  // including Australia when there's no WillyWeather key configured, since
+  // fetchBomAlerts silently no-ops without one and would otherwise leave
+  // those locations with zero alerts. Dedup below handles any overlap once
+  // a key *is* configured.
+  if (!isUs && !isCa && (!isAu || !willyWeatherApiKey)) tasks.push(fetchLibreWxrAlerts(libreWxrHost, bbox));
 
   const results = await Promise.allSettled(tasks);
   const all = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
