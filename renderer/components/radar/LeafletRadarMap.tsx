@@ -419,11 +419,11 @@ export function LeafletRadarMap({
           // Pop-out windows: playback collapses to a slim toggle strip by
           // default (so the map gets as much of the window as possible) and
           // expands in place when clicked — never floats over the map.
-          <div className="flex flex-col" style={{ padding: "4px 8px" }}>
+          <div className="flex flex-col" style={{ padding: "0 8px" }}>
             <button
               type="button"
               className="flex w-full items-center justify-between gap-2"
-              style={{ background: "none", border: "none", padding: "6px 0", color: "inherit", cursor: "pointer", font: "inherit" }}
+              style={{ background: "none", border: "none", padding: "4px 0", color: "inherit", cursor: "pointer", font: "inherit" }}
               onClick={() => setShowPlaybackBar((v) => !v)}
               aria-expanded={showPlaybackBar}
             >
