@@ -230,24 +230,50 @@ function scheduleSessionSave() {
   if (saveSessionTimer) clearTimeout(saveSessionTimer);
   saveSessionTimer = setTimeout(() => {
     saveSessionTimer = null;
-    const entries: SessionWindowEntry[] = [];
-    for (const tracked of windows.values()) {
-      // Alert windows are transient token-handoff popups — restoring them
-      // on relaunch would mean restoring a payload that's already gone.
-      if (tracked.role === "alert") continue;
-      if (tracked.win.isDestroyed()) continue;
-      const b = tracked.win.getBounds();
-      entries.push({
-        role: tracked.role,
-        instanceId: tracked.instanceId,
-        pairedInstanceId: tracked.pairedInstanceId,
-        isPrimaryPopout: tracked.win.id === primaryPopoutWindowId,
-        location: tracked.location ?? null,
-        bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
-      });
-    }
-    void sessionStore.write({ windows: entries });
+    // A bare `void` here would leave a rejected write (disk full,
+    // permissions, a transient I/O error) as an unhandled rejection, which
+    // can crash the whole main process under Node's default handling.
+    void saveSessionSnapshot().catch((err) => {
+      console.error("[session] failed to save session snapshot:", err);
+    });
   }, 500);
+}
+
+async function saveSessionSnapshot() {
+  const entries: SessionWindowEntry[] = [];
+  for (const tracked of windows.values()) {
+    // Alert windows are transient token-handoff popups — restoring them
+    // on relaunch would mean restoring a payload that's already gone.
+    if (tracked.role === "alert") continue;
+    if (tracked.win.isDestroyed()) continue;
+    const b = tracked.win.getBounds();
+    entries.push({
+      role: tracked.role,
+      instanceId: tracked.instanceId,
+      pairedInstanceId: tracked.pairedInstanceId,
+      isPrimaryPopout: tracked.win.id === primaryPopoutWindowId,
+      location: tracked.location ?? null,
+      bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
+    });
+  }
+
+  const config = await configStore.read();
+  if (config.uiMode !== "advanced") {
+    // Classic mode never opens pop-outs itself (the UI hides those
+    // affordances), so `entries` here reflects only "main" — saving that
+    // as-is would clobber whatever pop-out layout was last persisted while
+    // in "advanced" mode, and flipping back to "advanced" would then
+    // restore nothing (see the comment where this snapshot is restored, in
+    // app.whenReady()). Preserve the on-disk pop-out entries untouched and
+    // only update "main"'s own bounds.
+    const existing = await sessionStore.read();
+    const preservedPopouts = existing.windows.filter((w) => w.role !== "main");
+    const mainEntry = entries.find((w) => w.role === "main");
+    await sessionStore.write({ windows: mainEntry ? [mainEntry, ...preservedPopouts] : preservedPopouts });
+    return;
+  }
+
+  await sessionStore.write({ windows: entries });
 }
 
 /** Nominatim's and NWS's usage policies ask for a descriptive User-Agent

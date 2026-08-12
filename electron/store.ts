@@ -69,8 +69,16 @@ class JsonStore<T extends object> {
     this.cache = data;
     // Serialize writes so rapid-fire updates (e.g. dragging a slider) can't
     // race and corrupt the file with an out-of-order rename.
-    this.writeQueue = this.writeQueue.then(() => writeJsonAtomic(this.filePath(), data));
-    await this.writeQueue;
+    const task = this.writeQueue.then(() => writeJsonAtomic(this.filePath(), data));
+    // Recover the chain regardless of outcome — without this, a single
+    // failed write (disk full, permissions, a transient I/O error) leaves
+    // `writeQueue` permanently rejected, and every future write() call
+    // chains onto it via `.then()`, which short-circuits straight to
+    // rejection without ever calling writeJsonAtomic again. Mirrors
+    // update()'s same recovery below; the caller of *this* write() still
+    // sees the failure via the unswallowed `task` awaited next.
+    this.writeQueue = task.catch(() => {});
+    await task;
     return data;
   }
 

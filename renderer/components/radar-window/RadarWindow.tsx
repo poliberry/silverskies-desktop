@@ -49,26 +49,30 @@ export function RadarWindow({ instanceId, initialLocation }: RadarWindowProps) {
     refetchIntervalInBackground: true,
   });
 
+  function updateLocation(next: WindowLocation) {
+    setLocation(next);
+    ipc.windows.sendInstanceLocation(instanceId, next);
+  }
+
   // No seed location at all (opened before the main window ever resolved
   // one, or launched standalone for testing) — fall back the same way the
   // main window does on first launch: IP-based geolocation, then a fixed
-  // default, rather than leaving the window blank.
+  // default, rather than leaving the window blank. Goes through
+  // updateLocation (not a bare setLocation) so the main-process registry
+  // — and therefore session.json — actually learns this window's location
+  // instead of persisting it as null and losing it on the next relaunch.
   useEffect(() => {
     if (location) return;
     let cancelled = false;
     void (async () => {
       const ip = await ipGeolocate();
-      if (!cancelled) setLocation(ip ?? DEFAULT_LOCATION);
+      if (!cancelled) updateLocation(ip ?? DEFAULT_LOCATION);
     })();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
-
-  function updateLocation(next: WindowLocation) {
-    setLocation(next);
-    ipc.windows.sendInstanceLocation(instanceId, next);
-  }
 
   async function handleSearch(query: string) {
     setSearchError(null);

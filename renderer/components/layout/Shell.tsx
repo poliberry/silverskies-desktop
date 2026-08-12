@@ -48,21 +48,35 @@ export function Shell() {
   // True once the main window's own radar has been undocked into its own
   // window (see TopBar's "Pop Out" button) — the middle column then gives
   // the audit log the full column instead of sharing it with the map.
-  const [radarPoppedOut, setRadarPoppedOut] = useState(false);
+  // Starts `null` ("not yet known") rather than `false` — the actual
+  // pop-out window can already exist when Shell mounts (surviving a
+  // main-window reload, or recreated from session.json on relaunch), and
+  // asking main for the real state is an async IPC round trip. Defaulting
+  // to `false` would flash the docked radar (mounting LeafletRadarMap,
+  // firing its own network requests) for a moment before flipping to
+  // undocked once that reply arrives; treating `null` as "render neither"
+  // avoids that transient duplicate-radar window entirely.
+  const [radarPoppedOut, setRadarPoppedOut] = useState<boolean | null>(null);
   useEffect(() => ipc.windows.onPrimaryRadarClosed(() => setRadarPoppedOut(false)), []);
-  // Shell's own state always starts at `false` on mount, but the actual
-  // pop-out window can already exist — surviving a main-window reload, or
-  // recreated from session.json on relaunch — so ask main for the real
-  // state instead of assuming docked.
   useEffect(() => {
     let cancelled = false;
     void ipc.windows.isPrimaryRadarOpen().then((open) => {
-      if (!cancelled && open) setRadarPoppedOut(true);
+      if (!cancelled) setRadarPoppedOut(open);
     });
     return () => {
       cancelled = true;
     };
   }, []);
+  // Classic mode has no in-app way to redock (the Pop Out button only
+  // renders in advanced mode) — without this, switching Settings → Interface
+  // from Advanced to Classic while undocked left the main window with no
+  // visible radar at all, and no way to get one back short of manually
+  // closing the separate radar window. The orphaned pop-out (if the user
+  // had one) is left open and fully functional on its own; only Shell's
+  // own docked/undocked layout is forced back to docked.
+  useEffect(() => {
+    if (!isAdvancedUi) setRadarPoppedOut(false);
+  }, [isAdvancedUi]);
   const [demoAlerts, setDemoAlerts] = useState<NormalizedAlert[]>([]);
   // The asteroid easter egg forces a specific pulse color directly rather
   // than deriving one from alert classification (it isn't a real hazard
@@ -163,7 +177,7 @@ export function Shell() {
           timezone={weatherQuery.data?.timezone}
           timeFormat={timeFormat}
           showRadarWindowActions={isAdvancedUi}
-          radarPoppedOut={radarPoppedOut}
+          radarPoppedOut={radarPoppedOut === true}
           onPopOutRadar={handlePopOutRadar}
           onNewRadarWindow={handleNewRadarWindow}
         />
@@ -192,7 +206,11 @@ export function Shell() {
         />
 
         <div className="flex min-h-0 flex-col gap-4">
-          {!radarPoppedOut && (
+          {/* Strictly `=== false`, not `!radarPoppedOut` — while it's still
+              `null` (state not yet confirmed with main), rendering nothing
+              here is what avoids briefly mounting a duplicate docked radar
+              that then immediately unmounts once the real state arrives. */}
+          {radarPoppedOut === false && (
             <div className="min-h-0" style={{ flex: "2 1 0%" }}>
               {active && (
                 <RadarMap
@@ -210,7 +228,7 @@ export function Shell() {
           )}
           {/* Popping the radar out frees the whole column for the audit log
               instead of splitting it 2:1 with the map. */}
-          <div className="glass-card min-h-0 p-3" style={{ flex: radarPoppedOut ? "1 1 100%" : "1 1 0%" }}>
+          <div className="glass-card min-h-0 p-3" style={{ flex: radarPoppedOut === true ? "1 1 100%" : "1 1 0%" }}>
             <AlertLog
               alerts={alertsQuery.data ?? []}
               isLoading={alertsQuery.isLoading}
