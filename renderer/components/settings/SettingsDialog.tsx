@@ -229,6 +229,30 @@ export function SettingsDialog({
                 Defaults to the public instance. Point this at your own self-hosted LibreWXR server if you run one.
               </p>
             </div>
+
+            <div className="settings-bar-section">
+              <div className="settings-bar-label">SPC DAY 1 OUTLOOK</div>
+              <div className="settings-bar-group">
+                <button
+                  className={`unit-btn ${config.spcOutlookEnabled ? "active" : ""}`}
+                  onClick={() => updateConfig({ spcOutlookEnabled: true })}
+                >
+                  ON
+                </button>
+                <button
+                  className={`unit-btn ${!config.spcOutlookEnabled ? "active" : ""}`}
+                  onClick={() => updateConfig({ spcOutlookEnabled: false })}
+                >
+                  OFF
+                </button>
+              </div>
+              <p className="font-mono text-[0.68rem]" style={{ color: "var(--text3)" }}>
+                Shows the Storm Prediction Center&apos;s Day 1 Convective Outlook (Marginal/Slight/Enhanced/
+                Moderate/High risk) as outlined areas on the radar, plus a banner in the alert log when your
+                active location falls inside one. No key required. Until an on-radar Overlays button exists,
+                this is the only toggle for the radar outline.
+              </p>
+            </div>
           </TabsContent>
 
           <TabsContent value="developer" className="pt-4">

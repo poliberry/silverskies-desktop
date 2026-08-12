@@ -12,6 +12,7 @@ import { useSavedLocations } from "@/hooks/useSavedLocations";
 import { useSettings } from "@/hooks/useSettings";
 import { useWeather } from "@/hooks/useWeather";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useSpcOutlook } from "@/hooks/useSpcOutlook";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 import { useConditionAccent } from "@/hooks/useConditionAccent";
 import { useSeverePulse } from "@/hooks/useSeverePulse";
@@ -21,6 +22,7 @@ import { useAsteroid } from "@/hooks/useAsteroid";
 import { useLocationWatcher } from "@/hooks/useLocationWatcher";
 import { AsteroidCountdown } from "@/components/easter-eggs/AsteroidCountdown";
 import { activeSeverePulseColor } from "@/lib/alerts/merge";
+import { findOutlookAtPoint } from "@/lib/alerts/spc-outlook";
 import { buildTodayOutlook } from "@/lib/forecast-outlook";
 import { ProviderConfigError } from "@/lib/providers";
 import type { NormalizedAlert } from "@/types/alerts";
@@ -34,6 +36,8 @@ export function Shell() {
 
   const weatherQuery = useWeather(active);
   const alertsQuery = useAlerts(active?.lat ?? null, active?.lon ?? null);
+  const spcOutlookEnabled = config?.spcOutlookEnabled ?? true;
+  const spcOutlookQuery = useSpcOutlook(spcOutlookEnabled);
   const [demoAlerts, setDemoAlerts] = useState<NormalizedAlert[]>([]);
   // The asteroid easter egg forces a specific pulse color directly rather
   // than deriving one from alert classification (it isn't a real hazard
@@ -74,6 +78,10 @@ export function Shell() {
   const todayOutlook = weatherQuery.data
     ? buildTodayOutlook(weatherQuery.data.current, weatherQuery.data.daily[0], unit)
     : null;
+  const spcOutlook =
+    spcOutlookEnabled && active && spcOutlookQuery.data
+      ? findOutlookAtPoint(spcOutlookQuery.data, active.lat, active.lon)
+      : null;
 
   const weatherError =
     weatherQuery.error instanceof ProviderConfigError
@@ -151,6 +159,7 @@ export function Shell() {
                 libreWxrHost={libreWxrHost}
                 theme={resolvedTheme}
                 preloadLocations={savedLocations}
+                spcOutlookEnabled={spcOutlookEnabled}
               />
             )}
           </div>
@@ -160,6 +169,7 @@ export function Shell() {
               isLoading={alertsQuery.isLoading}
               demoAlerts={demoAlerts}
               todayOutlook={todayOutlook}
+              spcOutlook={spcOutlook}
             />
           </div>
         </div>

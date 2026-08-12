@@ -17,6 +17,7 @@ const DEFAULT_CONFIG: ConfigFile = {
   autoRefreshMinutes: 30,
   devToolsEnabled: false,
   notificationsEnabled: true,
+  spcOutlookEnabled: true,
 };
 
 let warned = false;

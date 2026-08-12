@@ -16,6 +16,7 @@ import { fetchSpcMdAlerts } from "@/lib/alerts/spc-md";
 import { resolveAlertColor } from "@/lib/alerts/color.client";
 import { preloadRadarFrame } from "@/lib/radar-preload";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useSpcOutlook } from "@/hooks/useSpcOutlook";
 import type { RadarMapProps } from "./RadarMap";
 import { RadarControls } from "./RadarControls";
 import { RadarLegend } from "./RadarLegend";
@@ -128,7 +129,55 @@ function AlertPolygonsLayer({ host }: { host: string }) {
   );
 }
 
-export function LeafletRadarMap({ lat, lon, label, libreWxrHost, theme, preloadLocations }: RadarMapProps) {
+/**
+ * SPC Day 1 Categorical Outlook overlay — outlined in the same style as
+ * AlertPolygonsLayer above, colored from each polygon's own official SPC
+ * stroke/fill hex (see spc-outlook.ts) rather than resolveAlertColor's
+ * `.alert-*` CSS taxonomy, since there's no per-category class for this.
+ * Unlike AlertPolygonsLayer, this isn't bbox/viewport-scoped — the whole
+ * CONUS layer is only ever a handful of polygons.
+ */
+function SpcOutlookLayer({ enabled }: { enabled: boolean }) {
+  const { data } = useSpcOutlook(enabled);
+  const outlooks = enabled ? (data ?? []) : [];
+
+  if (!outlooks.length) return null;
+
+  const featureCollection: FeatureCollection = {
+    type: "FeatureCollection",
+    features: outlooks.map(
+      (o): Feature => ({
+        type: "Feature",
+        geometry: o.geometry as Feature["geometry"],
+        properties: { code: o.code, name: o.name, stroke: o.stroke, fill: o.fill },
+      }),
+    ),
+  };
+
+  return (
+    <GeoJSON
+      key={outlooks.map((o) => o.code).join(",")}
+      data={featureCollection}
+      style={(feature) => ({
+        color: feature?.properties?.stroke ?? "#888888",
+        weight: 1.5,
+        fillColor: feature?.properties?.fill ?? "#888888",
+        fillOpacity: 0.18,
+      })}
+      onEachFeature={(feature, layer) => {
+        const p = feature.properties ?? {};
+        layer.bindPopup(
+          `<div style="font-family:var(--mono);min-width:180px;">
+            <strong style="text-transform:uppercase;letter-spacing:.05em;font-size:.8rem;">${escapeHtml(String(p.name ?? "SPC Outlook"))}</strong>
+          </div>`,
+          { autoPan: false },
+        );
+      }}
+    />
+  );
+}
+
+export function LeafletRadarMap({ lat, lon, label, libreWxrHost, theme, preloadLocations, spcOutlookEnabled }: RadarMapProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [colorScheme, setColorScheme] = useState(1);
@@ -245,6 +294,7 @@ export function LeafletRadarMap({ lat, lon, label, libreWxrHost, theme, preloadL
           <TileLayer url={theme === "light" ? CARTO_LIGHT : CARTO_DARK} attribution={CARTO_ATTRIB} />
           <RadarTileCrossfade url={debouncedRadarUrl} targetOpacity={0.75} zIndex={5} />
           <AlertPolygonsLayer host={libreWxrHost} />
+          <SpcOutlookLayer enabled={spcOutlookEnabled} />
           <Marker position={[lat, lon]} icon={locationIcon} />
           <RecenterOnLocationChange lat={lat} lon={lon} />
         </MapContainer>

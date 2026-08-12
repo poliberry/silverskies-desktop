@@ -33,4 +33,8 @@ export interface ConfigFile {
   autoRefreshMinutes: number;
   devToolsEnabled: boolean;
   notificationsEnabled: boolean;
+  /** SPC Day 1 Categorical Convective Outlook — radar outline overlay plus
+   * an alerts-panel banner when the active location falls inside a risk
+   * category. */
+  spcOutlookEnabled: boolean;
 }

@@ -33,6 +33,10 @@ export interface ConfigFile {
   /** Desktop toast notifications for new alerts, notable forecasts, and
    * heads-up severe-weather warnings across saved locations. */
   notificationsEnabled: boolean;
+  /** SPC Day 1 Categorical Convective Outlook — radar outline overlay plus
+   * an alerts-panel banner when the active location falls inside a risk
+   * category. */
+  spcOutlookEnabled: boolean;
 }
 
 export const DEFAULT_LOCATIONS: LocationsFile = {
@@ -72,4 +76,5 @@ export const DEFAULT_CONFIG: ConfigFile = {
   autoRefreshMinutes: 30,
   devToolsEnabled: false,
   notificationsEnabled: true,
+  spcOutlookEnabled: true,
 };
