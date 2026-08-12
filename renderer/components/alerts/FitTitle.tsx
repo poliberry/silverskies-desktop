@@ -5,9 +5,15 @@ import { useLayoutEffect, useRef } from "react";
 export interface FitTitleProps {
   text: string;
   color: string;
-  maxFontSizePx?: number;
-  minFontSizePx?: number;
+  fontSizePx?: number;
 }
+
+// Google Sans Flex's true wdth axis runs ultra-condensed → extra-expanded
+// (confirmed against the font's actual @font-face buckets, not just the
+// 100-150 slice used elsewhere for the stretched temp display) — see the
+// font link in app/layout.tsx, which loads the full range for this reason.
+const MAX_WDTH = 150;
+const MIN_WDTH = 25;
 
 /**
  * Renders `text` in Google Sans Flex on a single line, sized to fill the
@@ -15,14 +21,13 @@ export interface FitTitleProps {
  * numbers elsewhere in the app, but adapted per-title instead of a fixed
  * `font-variation-settings`.
  *
- * Google Sans Flex's `wdth` axis only goes *wider* than normal (100-150 in
- * the weights loaded — see app/layout.tsx), so "auto-fit" here means: start
- * stretched wide, narrow the `wdth` axis back toward 100 as titles get
- * longer, and only then fall back to shrinking font-size for anything that
- * still doesn't fit at the narrowest width (very long product names like
- * "Severe Thunderstorm Warning (Destructive)").
+ * Fitting is done entirely via the `wdth` variation axis (starting stretched
+ * wide, narrowing toward ultra-condensed as titles get longer) — font-size
+ * stays fixed. Even the longest product names (e.g. "Severe Thunderstorm
+ * Warning (Destructive)") fit within the axis range, so there's no
+ * font-size fallback to reach for.
  */
-export function FitTitle({ text, color, maxFontSizePx = 34, minFontSizePx = 15 }: FitTitleProps) {
+export function FitTitle({ text, color, fontSizePx = 34 }: FitTitleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
 
@@ -37,21 +42,15 @@ export function FitTitle({ text, color, maxFontSizePx = 34, minFontSizePx = 15 }
       const container2 = containerRef.current;
       const el2 = textRef.current;
       if (!container2 || !el2) return;
-      let wdth = 150;
-      let fontSize = maxFontSizePx;
-      el2.style.fontSize = `${fontSize}px`;
+      let wdth = MAX_WDTH;
       el2.style.fontVariationSettings = `'wdth' ${wdth}`;
 
       const available = container2.clientWidth;
       if (available <= 0) return; // not laid out yet — the mount-time fit() call below will retry
 
-      while (el2.scrollWidth > available && wdth > 100) {
+      while (el2.scrollWidth > available && wdth > MIN_WDTH) {
         wdth -= 2;
         el2.style.fontVariationSettings = `'wdth' ${wdth}`;
-      }
-      while (el2.scrollWidth > available && fontSize > minFontSizePx) {
-        fontSize -= 1;
-        el2.style.fontSize = `${fontSize}px`;
       }
     }
 
@@ -73,7 +72,7 @@ export function FitTitle({ text, color, maxFontSizePx = 34, minFontSizePx = 15 }
       observer.disconnect();
       document.fonts?.removeEventListener("loadingdone", fit);
     };
-  }, [text, maxFontSizePx, minFontSizePx]);
+  }, [text]);
 
   return (
     <div ref={containerRef} className="block min-w-0 max-w-full flex-1 overflow-hidden">
@@ -83,6 +82,7 @@ export function FitTitle({ text, color, maxFontSizePx = 34, minFontSizePx = 15 }
         style={{
           fontFamily: "'Google Sans Flex', var(--sans)",
           fontWeight: 500,
+          fontSize: `${fontSizePx}px`,
           letterSpacing: "-0.01em",
           color,
           lineHeight: 1.1,
