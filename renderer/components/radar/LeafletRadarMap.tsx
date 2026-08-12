@@ -137,14 +137,20 @@ const SPC_OUTLOOK_PANE = "spc-outlook-pane";
  * so this reliably keeps the broad, filled outlook polygons from stealing
  * clicks meant for a smaller severe-alert polygon layered on top of them,
  * even though which layer's data resolves (and mounts) first varies with
- * network timing. */
-function useOutlookPane() {
-  const map = useMap();
-  useEffect(() => {
-    if (map.getPane(SPC_OUTLOOK_PANE)) return;
-    const pane = map.createPane(SPC_OUTLOOK_PANE);
-    pane.style.zIndex = "399";
-  }, [map]);
+ * network timing.
+ *
+ * Deliberately synchronous (called during render, not from an effect):
+ * React fires a component's own effects *after* its children's, so if this
+ * ran in a useEffect here it could still lose the race against <GeoJSON>'s
+ * own mount effect — e.g. when useSpcOutlook already has cached data (map
+ * remounted, tab revisited, ...) and <GeoJSON> attaches to the map in the
+ * very same commit. Leaflet then tries to render into a pane that doesn't
+ * exist yet and throws. `map.createPane` is idempotent (guarded below) and
+ * doesn't touch React state, so doing it inline is safe. */
+function ensureOutlookPane(map: L.Map) {
+  if (map.getPane(SPC_OUTLOOK_PANE)) return;
+  const pane = map.createPane(SPC_OUTLOOK_PANE);
+  pane.style.zIndex = "399";
 }
 
 /**
@@ -156,7 +162,8 @@ function useOutlookPane() {
  * CONUS layer is only ever a handful of polygons.
  */
 function SpcOutlookLayer({ enabled }: { enabled: boolean }) {
-  useOutlookPane();
+  const map = useMap();
+  ensureOutlookPane(map);
   const { data } = useSpcOutlook(enabled);
   const outlooks = enabled ? (data ?? []) : [];
 
