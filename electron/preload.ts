@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppInfo, ConfigFile, LocationsFile, SavedLocation, UpdaterStatus } from "./types";
+import type {
+  AppInfo,
+  ConfigFile,
+  LocationsFile,
+  SavedLocation,
+  UpdaterStatus,
+  WindowLocation,
+} from "./types";
 
 /**
  * Narrow, typed bridge exposed to the renderer as `window.silverSkies`.
@@ -37,6 +44,40 @@ const api = {
       const listener = (_event: Electron.IpcRendererEvent, status: UpdaterStatus) => callback(status);
       ipcRenderer.on("updater:status", listener);
       return () => ipcRenderer.removeListener("updater:status", listener);
+    },
+  },
+  windows: {
+    openRadar: (opts?: {
+      instanceId?: string;
+      location?: WindowLocation | null;
+      isPrimaryPopout?: boolean;
+    }): Promise<void> => ipcRenderer.invoke("windows:openRadar", opts ?? {}),
+    openConditions: (opts: { instanceId: string; location?: WindowLocation | null }): Promise<void> =>
+      ipcRenderer.invoke("windows:openConditions", opts),
+    // `alert` is an opaque, JSON-serializable payload (a NormalizedAlert on
+    // the renderer side) — the main process just stashes it in memory and
+    // hands it back once to whichever window asks for this token, so it
+    // isn't typed any more narrowly here (electron/'s TS project has no
+    // access to renderer/'s alert types).
+    openAlert: (alert: unknown): Promise<void> => ipcRenderer.invoke("windows:openAlert", alert),
+    getAlertPayload: (token: string): Promise<unknown> => ipcRenderer.invoke("windows:getAlertPayload", token),
+    // Fire-and-forget: a radar window announces its active location whenever
+    // it changes; main relays it only to that instance's paired Conditions
+    // window (if one is open), so no response/ack is meaningful here.
+    sendInstanceLocation: (instanceId: string, location: WindowLocation): void =>
+      ipcRenderer.send("windows:instanceLocationChanged", instanceId, location),
+    onInstanceLocation: (callback: (location: WindowLocation) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, location: WindowLocation) => callback(location);
+      ipcRenderer.on("windows:instanceLocation", listener);
+      return () => ipcRenderer.removeListener("windows:instanceLocation", listener);
+    },
+    // Fires when the one radar window that undocked the main window's own
+    // radar (opened via openRadar({isPrimaryPopout:true})) closes, so Shell
+    // knows to redock.
+    onPrimaryRadarClosed: (callback: () => void): (() => void) => {
+      const listener = () => callback();
+      ipcRenderer.on("windows:primaryRadarClosed", listener);
+      return () => ipcRenderer.removeListener("windows:primaryRadarClosed", listener);
     },
   },
 };

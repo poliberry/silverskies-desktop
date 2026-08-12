@@ -1,5 +1,7 @@
 import type { ConfigFile, LocationsFile, SavedLocation } from "./settings";
 import type { AppInfo, UpdaterStatus } from "./updater";
+import type { WindowLocation } from "./windows";
+import type { NormalizedAlert } from "./alerts";
 
 // Mirrors the shape contextBridge.exposeInMainWorld("silverSkies", ...)
 // exposes from electron/preload.ts. Kept as a separate declaration since
@@ -28,6 +30,19 @@ export interface SilverSkiesApi {
     install(): Promise<void>;
     getStatus(): Promise<UpdaterStatus>;
     onStatus(callback: (status: UpdaterStatus) => void): () => void;
+  };
+  windows: {
+    openRadar(opts?: {
+      instanceId?: string;
+      location?: WindowLocation | null;
+      isPrimaryPopout?: boolean;
+    }): Promise<void>;
+    openConditions(opts: { instanceId: string; location?: WindowLocation | null }): Promise<void>;
+    openAlert(alert: NormalizedAlert): Promise<void>;
+    getAlertPayload(token: string): Promise<NormalizedAlert | null>;
+    sendInstanceLocation(instanceId: string, location: WindowLocation): void;
+    onInstanceLocation(callback: (location: WindowLocation) => void): () => void;
+    onPrimaryRadarClosed(callback: () => void): () => void;
   };
 }
 

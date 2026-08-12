@@ -1,5 +1,7 @@
 import type { ConfigFile, LocationsFile, SavedLocation } from "@/types/settings";
 import type { AppInfo, UpdaterStatus } from "@/types/updater";
+import type { WindowLocation } from "@/types/windows";
+import type { NormalizedAlert } from "@/types/alerts";
 import "@/types/ipc";
 
 const DEFAULT_APP_INFO: AppInfo = { version: "dev", electron: "-", chrome: "-", node: "-", platform: "-", arch: "-" };
@@ -10,6 +12,7 @@ const DEFAULT_CONFIG: ConfigFile = {
   provider: "open-meteo",
   accuWeatherApiKey: null,
   willyWeatherApiKey: null,
+  openWeatherMapApiKey: null,
   libreWxrHost: "https://api.librewxr.net",
   units: "F",
   timeFormat: "12",
@@ -18,6 +21,7 @@ const DEFAULT_CONFIG: ConfigFile = {
   devToolsEnabled: false,
   notificationsEnabled: true,
   spcOutlookEnabled: true,
+  uiMode: "classic",
 };
 
 let warned = false;
@@ -118,6 +122,40 @@ export const ipc = {
         return () => {};
       }
       return window.silverSkies.updater.onStatus(callback);
+    },
+  },
+  windows: {
+    async openRadar(opts?: {
+      instanceId?: string;
+      location?: WindowLocation | null;
+      isPrimaryPopout?: boolean;
+    }): Promise<void> {
+      if (!window.silverSkies) { warnNoBridge(); return; }
+      return window.silverSkies.windows.openRadar(opts);
+    },
+    async openConditions(opts: { instanceId: string; location?: WindowLocation | null }): Promise<void> {
+      if (!window.silverSkies) { warnNoBridge(); return; }
+      return window.silverSkies.windows.openConditions(opts);
+    },
+    async openAlert(alert: NormalizedAlert): Promise<void> {
+      if (!window.silverSkies) { warnNoBridge(); return; }
+      return window.silverSkies.windows.openAlert(alert);
+    },
+    async getAlertPayload(token: string): Promise<NormalizedAlert | null> {
+      if (!window.silverSkies) return null;
+      return window.silverSkies.windows.getAlertPayload(token);
+    },
+    sendInstanceLocation(instanceId: string, location: WindowLocation): void {
+      if (!window.silverSkies) return;
+      window.silverSkies.windows.sendInstanceLocation(instanceId, location);
+    },
+    onInstanceLocation(callback: (location: WindowLocation) => void): () => void {
+      if (!window.silverSkies) return () => {};
+      return window.silverSkies.windows.onInstanceLocation(callback);
+    },
+    onPrimaryRadarClosed(callback: () => void): () => void {
+      if (!window.silverSkies) return () => {};
+      return window.silverSkies.windows.onPrimaryRadarClosed(callback);
     },
   },
 };

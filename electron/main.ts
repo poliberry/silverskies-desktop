@@ -3,8 +3,16 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import serve from "electron-serve";
 import { autoUpdater } from "electron-updater";
-import { configStore, locationsStore } from "./store";
-import type { AppInfo, SavedLocation, UpdaterStatus } from "./types";
+import { configStore, locationsStore, sessionStore } from "./store";
+import type {
+  AppInfo,
+  SavedLocation,
+  SessionWindowEntry,
+  UpdaterStatus,
+  WindowBoundsRect,
+  WindowLocation,
+  WindowRole,
+} from "./types";
 
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 const DEV_URL = "http://localhost:3000";
@@ -22,7 +30,51 @@ const ICON_DARK_PATH = path.join(ASSETS_DIR, "icon-dark.png");
 // a Next export straight off file:// and avoids bundling a Node server.
 const loadProdApp = serve({ directory: path.join(__dirname, "../renderer/out") });
 
-let mainWindow: BrowserWindow | null = null;
+/**
+ * Every open window (main, plus however many radar/conditions/alert
+ * pop-outs) is tracked here, keyed by Electron's own numeric window id.
+ * This replaced a single module-level `mainWindow` variable now that the
+ * app supports opening multiple independent radar instances — see
+ * getMainWindow()/getRadarWindow()/getConditionsWindowsFor() below for the
+ * lookups that used to just be `mainWindow` directly.
+ */
+interface TrackedWindow {
+  win: BrowserWindow;
+  role: WindowRole;
+  /** Unique per radar/conditions instance; absent for "main" and "alert". */
+  instanceId?: string;
+  /** For a "conditions" window, the radar instanceId it tracks. */
+  pairedInstanceId?: string;
+  /** Last-known active location for this instance — persisted to
+   * session.json so a restored radar/conditions window reopens where it
+   * left off, and (for radar windows) relayed to any paired conditions
+   * window whenever it changes. */
+  location?: WindowLocation | null;
+}
+
+const windows = new Map<number, TrackedWindow>();
+// The single radar pop-out (if any) that undocked the *main* window's own
+// radar — as opposed to an independent "New Radar Window" instance. When
+// this one closes, Shell redocks. Only ever one at a time.
+let primaryPopoutWindowId: number | null = null;
+// Short-lived handoff for "open this alert in its own window" — keyed by a
+// one-time token so the alert's full text never has to round-trip through a
+// URL query string. Entries are deleted as soon as they're read, with a
+// timeout as a backstop in case the window is closed before it asks.
+const pendingAlertPayloads = new Map<string, unknown>();
+
+function getMainWindow(): BrowserWindow | null {
+  for (const tracked of windows.values()) {
+    if (tracked.role === "main") return tracked.win;
+  }
+  return null;
+}
+
+function broadcastToAll(channel: string, ...args: unknown[]) {
+  for (const tracked of windows.values()) {
+    tracked.win.webContents.send(channel, ...args);
+  }
+}
 
 /** Swaps the window/taskbar icon for the light/dark variant matching the OS
  * theme. This only affects the *running* window's icon (what Explorer shows
@@ -35,12 +87,69 @@ function applyWindowIcon(win: BrowserWindow) {
   if (!icon.isEmpty()) win.setIcon(icon);
 }
 
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1080,
-    minHeight: 720,
+nativeTheme.on("updated", () => {
+  for (const tracked of windows.values()) applyWindowIcon(tracked.win);
+});
+
+/** Shared window.open()/navigation lock-down, wired identically for every
+ * window regardless of role — previously only ever applied to the single
+ * main window. */
+function wireCommonWindowBehavior(win: BrowserWindow) {
+  applyWindowIcon(win);
+
+  // Any window.open()/target=_blank (NWS/ECCC alert links, GitHub release
+  // notes, etc.) opens in the OS browser instead of a second Electron window.
+  // Radar/conditions/alert pop-outs are created directly via createAppWindow
+  // below (from IPC handlers), never via window.open(), so this doesn't
+  // conflict with the multi-window feature.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  // Block in-app navigation away from the app itself (defense in depth —
+  // nothing in the UI should trigger this, but a stray link shouldn't be
+  // able to repurpose a window either).
+  win.webContents.on("will-navigate", (event, url) => {
+    const isDevUrl = isDev && url.startsWith(DEV_URL);
+    const isAppUrl = url.startsWith("app://");
+    if (!isDevUrl && !isAppUrl) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+}
+
+const WINDOW_DEFAULTS: Record<WindowRole, { width: number; height: number; minWidth?: number; minHeight?: number }> = {
+  main: { width: 1440, height: 900, minWidth: 1080, minHeight: 720 },
+  radar: { width: 1200, height: 800, minWidth: 700, minHeight: 500 },
+  conditions: { width: 380, height: 820, minWidth: 320, minHeight: 480 },
+  alert: { width: 440, height: 600, minWidth: 360, minHeight: 400 },
+};
+
+interface CreateAppWindowOptions {
+  role: WindowRole;
+  instanceId?: string;
+  pairedInstanceId?: string;
+  location?: WindowLocation | null;
+  bounds?: WindowBoundsRect;
+  /** Only for role "alert" — the one-time token the alert window reads back
+   * out of its own launch URL to fetch its payload. */
+  alertToken?: string;
+}
+
+/** Generalized replacement for the old single-purpose createWindow() — every
+ * window (main included) is created through here so role/instance wiring,
+ * icon/navigation behavior, and session tracking all stay in one place. */
+function createAppWindow(opts: CreateAppWindowOptions): BrowserWindow {
+  const defaults = WINDOW_DEFAULTS[opts.role];
+  const win = new BrowserWindow({
+    x: opts.bounds?.x,
+    y: opts.bounds?.y,
+    width: opts.bounds?.width ?? defaults.width,
+    height: opts.bounds?.height ?? defaults.height,
+    minWidth: defaults.minWidth,
+    minHeight: defaults.minHeight,
     backgroundColor: "#0d0d0f", // matches --bg, avoids a white flash on load
     autoHideMenuBar: true,
     webPreferences: {
@@ -51,40 +160,80 @@ function createWindow() {
     },
   });
 
-  applyWindowIcon(mainWindow);
-  nativeTheme.on("updated", () => {
-    if (mainWindow) applyWindowIcon(mainWindow);
-  });
+  wireCommonWindowBehavior(win);
 
-  // Any window.open()/target=_blank (NWS/ECCC alert links, GitHub release
-  // notes, etc.) opens in the OS browser instead of a second Electron window.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: "deny" };
-  });
+  const tracked: TrackedWindow = {
+    win,
+    role: opts.role,
+    instanceId: opts.instanceId,
+    pairedInstanceId: opts.pairedInstanceId,
+    location: opts.location ?? null,
+  };
+  windows.set(win.id, tracked);
 
-  // Block in-app navigation away from the app itself (defense in depth —
-  // nothing in the UI should trigger this, but a stray link shouldn't be
-  // able to repurpose the main window either).
-  mainWindow.webContents.on("will-navigate", (event, url) => {
-    const isDevUrl = isDev && url.startsWith(DEV_URL);
-    const isAppUrl = url.startsWith("app://");
-    if (!isDevUrl && !isAppUrl) {
-      event.preventDefault();
-      shell.openExternal(url);
-    }
-  });
+  const query = new URLSearchParams({ window: opts.role });
+  if (opts.instanceId) query.set("instanceId", opts.instanceId);
+  if (opts.pairedInstanceId) query.set("pairedInstanceId", opts.pairedInstanceId);
+  if (opts.location) {
+    query.set("lat", String(opts.location.lat));
+    query.set("lon", String(opts.location.lon));
+    query.set("label", opts.location.label);
+  }
+  if (opts.alertToken) query.set("token", opts.alertToken);
 
   if (isDev) {
-    mainWindow.loadURL(DEV_URL);
-    mainWindow.webContents.openDevTools({ mode: "detach" });
+    const qs = query.toString();
+    win.loadURL(qs ? `${DEV_URL}/?${qs}` : DEV_URL);
+    win.webContents.openDevTools({ mode: "detach" });
   } else {
-    loadProdApp(mainWindow);
+    loadProdApp(win, query);
   }
 
-  mainWindow.on("closed", () => {
-    mainWindow = null;
+  // Debounced so dragging/resizing doesn't spam disk writes — see
+  // scheduleSessionSave() below.
+  win.on("moved", scheduleSessionSave);
+  win.on("resized", scheduleSessionSave);
+
+  win.on("closed", () => {
+    windows.delete(win.id);
+    if (win.id === primaryPopoutWindowId) {
+      primaryPopoutWindowId = null;
+      broadcastToAll("windows:primaryRadarClosed");
+    }
+    scheduleSessionSave();
   });
+
+  scheduleSessionSave();
+  return win;
+}
+
+// --- Session persistence (window.json snapshot of open pop-outs) ---------
+
+let saveSessionTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Debounced so a burst of window events (opening several pop-outs at once,
+ * dragging one around) collapses into a single write. */
+function scheduleSessionSave() {
+  if (saveSessionTimer) clearTimeout(saveSessionTimer);
+  saveSessionTimer = setTimeout(() => {
+    saveSessionTimer = null;
+    const entries: SessionWindowEntry[] = [];
+    for (const tracked of windows.values()) {
+      // Alert windows are transient token-handoff popups — restoring them
+      // on relaunch would mean restoring a payload that's already gone.
+      if (tracked.role === "alert") continue;
+      if (tracked.win.isDestroyed()) continue;
+      const b = tracked.win.getBounds();
+      entries.push({
+        role: tracked.role,
+        instanceId: tracked.instanceId,
+        pairedInstanceId: tracked.pairedInstanceId,
+        location: tracked.location ?? null,
+        bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
+      });
+    }
+    void sessionStore.write({ windows: entries });
+  }, 500);
 }
 
 /** Nominatim's and NWS's usage policies ask for a descriptive User-Agent
@@ -161,8 +310,11 @@ function registerIpcHandlers() {
   // the app's taskbar icon. Rasterizing the remote Pixel Weather SVG is done
   // in the renderer (via <canvas>, which can load SVGs natively) and handed
   // over as a data URL; this just turns that into a nativeImage. Windows-
-  // only API — a no-op everywhere else.
+  // only API — a no-op everywhere else. Deliberately scoped to the main
+  // window only: the taskbar icon is one shared OS resource, and the main
+  // window is the one that owns "current conditions for the active location".
   ipcMain.handle("app:setOverlayIcon", (_event, dataUrl: string | null, description: string) => {
+    const mainWindow = getMainWindow();
     if (process.platform !== "win32" || !mainWindow) return;
     const icon = dataUrl ? nativeImage.createFromDataURL(dataUrl) : null;
     mainWindow.setOverlayIcon(icon && !icon.isEmpty() ? icon : null, description);
@@ -179,12 +331,93 @@ function registerIpcHandlers() {
       icon: nativeImage.createFromPath(ICON_DARK_PATH),
     });
     notification.on("click", () => {
+      const mainWindow = getMainWindow();
       if (!mainWindow) return;
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
     });
     notification.show();
+  });
+}
+
+function registerWindowIpcHandlers() {
+  ipcMain.handle(
+    "windows:openRadar",
+    (
+      _event,
+      opts: { instanceId?: string; location?: WindowLocation | null; isPrimaryPopout?: boolean } = {},
+    ) => {
+      if (opts.instanceId) {
+        const existing = [...windows.values()].find(
+          (t) => t.role === "radar" && t.instanceId === opts.instanceId,
+        );
+        if (existing) {
+          if (existing.win.isMinimized()) existing.win.restore();
+          existing.win.show();
+          existing.win.focus();
+          return;
+        }
+      }
+      const instanceId = opts.instanceId ?? randomUUID();
+      const win = createAppWindow({ role: "radar", instanceId, location: opts.location ?? null });
+      if (opts.isPrimaryPopout) primaryPopoutWindowId = win.id;
+    },
+  );
+
+  ipcMain.handle(
+    "windows:openConditions",
+    (_event, opts: { instanceId: string; location?: WindowLocation | null }) => {
+      const existing = [...windows.values()].find(
+        (t) => t.role === "conditions" && t.pairedInstanceId === opts.instanceId,
+      );
+      if (existing) {
+        if (existing.win.isMinimized()) existing.win.restore();
+        existing.win.show();
+        existing.win.focus();
+        return;
+      }
+      createAppWindow({
+        role: "conditions",
+        instanceId: randomUUID(),
+        pairedInstanceId: opts.instanceId,
+        location: opts.location ?? null,
+      });
+    },
+  );
+
+  ipcMain.handle("windows:openAlert", (_event, alert: unknown) => {
+    const token = randomUUID();
+    pendingAlertPayloads.set(token, alert);
+    // Backstop: if nothing ever reads it (window closed before mounting,
+    // etc.) don't hold onto arbitrary alert text indefinitely.
+    setTimeout(() => pendingAlertPayloads.delete(token), 5 * 60_000).unref();
+    createAppWindow({ role: "alert", alertToken: token });
+  });
+
+  ipcMain.handle("windows:getAlertPayload", (_event, token: string) => {
+    const payload = pendingAlertPayloads.get(token) ?? null;
+    pendingAlertPayloads.delete(token);
+    return payload;
+  });
+
+  // Fire-and-forget: a radar window announces its own active location
+  // whenever it changes (search, saved-location pick). Relayed only to that
+  // instance's paired Conditions window, if one happens to be open, and
+  // recorded on the sender's own tracked entry so session.json restores it
+  // to the right place too.
+  ipcMain.on("windows:instanceLocationChanged", (event, instanceId: string, location: WindowLocation) => {
+    const sender = BrowserWindow.fromWebContents(event.sender);
+    const senderTracked = sender ? windows.get(sender.id) : undefined;
+    if (senderTracked) senderTracked.location = location;
+
+    for (const tracked of windows.values()) {
+      if (tracked.role === "conditions" && tracked.pairedInstanceId === instanceId) {
+        tracked.location = location;
+        tracked.win.webContents.send("windows:instanceLocation", location);
+      }
+    }
+    scheduleSessionSave();
   });
 }
 
@@ -197,7 +430,10 @@ let lastUpdaterStatus: UpdaterStatus = { state: "idle" };
 
 function sendUpdaterStatus(status: UpdaterStatus) {
   lastUpdaterStatus = status;
-  mainWindow?.webContents.send("updater:status", status);
+  // Broadcast rather than main-only: harmless for pop-out windows (nothing
+  // in them listens), and keeps this correct if the About/updater UI is
+  // ever surfaced somewhere other than the main window's Settings dialog.
+  broadcastToAll("updater:status", status);
 }
 
 /** Wires electron-updater's events to the renderer (About tab) and exposes
@@ -238,11 +474,33 @@ if (process.platform === "win32") {
   app.setAppUserModelId("com.silverskies.desktop");
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   registerUserAgentHeader();
   registerIpcHandlers();
   registerUpdaterHandlers();
-  createWindow();
+  registerWindowIpcHandlers();
+
+  const [config, savedSession] = await Promise.all([configStore.read(), sessionStore.read()]);
+
+  const mainEntry = savedSession.windows.find((w) => w.role === "main");
+  createAppWindow({ role: "main", bounds: mainEntry?.bounds });
+
+  // Pop-out windows are only ever created by the user through the
+  // "advanced" UI's affordances, so only restore them when that's still the
+  // user's preference — flipping back to "classic" simply stops reopening
+  // them (the snapshot itself is left alone, in case they flip back).
+  if (config.uiMode === "advanced") {
+    for (const entry of savedSession.windows) {
+      if (entry.role === "main" || entry.role === "alert") continue;
+      createAppWindow({
+        role: entry.role,
+        instanceId: entry.instanceId,
+        pairedInstanceId: entry.pairedInstanceId,
+        location: entry.location ?? null,
+        bounds: entry.bounds,
+      });
+    }
+  }
 
   // No-op until `publish.owner` in package.json is pointed at a real repo
   // with published releases; failures here must never block the app.
@@ -253,7 +511,7 @@ app.whenReady().then(() => {
   }
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createAppWindow({ role: "main" });
   });
 });
 
