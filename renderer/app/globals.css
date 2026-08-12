@@ -289,6 +289,16 @@ body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
 }
 
 /* ── Buttons / inputs — reused across sidebar, radar controls, settings ── */
+/* Was never actually defined — its buttons fell back to the browser
+   default (inline-block), which wraps onto a second line like ordinary
+   text once the row runs out of horizontal space. Explicit nowrap flex
+   keeps a "°F / °C"-style pair together on one line regardless of window
+   width — the TopBar depends on this to guarantee it never wraps. */
+.unit-toggle { display: inline-flex; flex-wrap: nowrap; flex-shrink: 0; }
+/* Scoped to the TopBar specifically — shrinks its buttons a bit vertically
+   without touching .unit-btn/.refresh-btn's padding everywhere else they're
+   used (Settings, RadarControls, sidebar). */
+.topbar .unit-btn, .topbar .refresh-btn { padding-top: 3px; padding-bottom: 3px; }
 .unit-btn {
   font-family: var(--mono); font-size: 0.85rem; padding: 6px 12px;
   background: transparent; border: 1px solid var(--border); color: var(--text3);
@@ -334,6 +344,23 @@ body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
 .refresh-btn:hover { border-color: var(--border-active); color: var(--accent2); }
 .refresh-btn.spinning .ri { animation: spin 0.8s linear infinite; }
 .ri { display: inline-block; }
+
+/* ── Custom titlebar (every window is frameless) ─────────────────────
+   `.drag-region` goes on whatever bar should double as the OS titlebar
+   (TopBar for the main window, the alt bar / header strip for pop-outs);
+   `.no-drag` carves out the actual interactive controls inside it (inputs,
+   buttons, dropdown triggers) so they stay clickable/selectable. */
+.drag-region { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }
+
+.window-controls { display: flex; align-items: center; flex-shrink: 0; }
+.window-control-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 22px; background: none; border: none;
+  color: var(--text3); cursor: pointer; transition: background 0.1s, color 0.1s;
+}
+.window-control-btn:hover { background: var(--surface); color: var(--text); }
+.window-control-btn.close-btn:hover { background: #e81123; color: #fff; }
 
 /* ── Error / geo notice ─────────────────────────────────────────────── */
 .error-box {
@@ -532,8 +559,13 @@ body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
 .forecast-icon { display: flex; justify-content: center; }
 .forecast-icon-glyph { font-size: 18px; line-height: 1; color: var(--text2); }
 .forecast-row.today .forecast-icon-glyph { color: var(--accent2); }
-.temp-bar-bg { height: 3px; background: var(--surface3); border-radius: 2px; overflow: hidden; }
-.temp-bar-fill { height: 100%; background: linear-gradient(to right, var(--accent), #ff8844); border-radius: 2px; transition: width 0.8s cubic-bezier(0.23, 1, 0.32, 1), background 1.2s ease; }
+.temp-bar-bg { position: relative; height: 3px; background: var(--surface3); border-radius: 2px; overflow: hidden; }
+/* `left` needs `position: absolute` to do anything — without it (and
+   without accounting for each day's low, only its high) every bar started
+   at the track's left edge, so a mild day and a scorching day with the
+   same high looked identical instead of reflecting where that day's actual
+   low–high range sits within the week's overall range. */
+.temp-bar-fill { position: absolute; top: 0; height: 100%; background: linear-gradient(to right, var(--accent), #ff8844); border-radius: 2px; transition: left 0.8s cubic-bezier(0.23, 1, 0.32, 1), width 0.8s cubic-bezier(0.23, 1, 0.32, 1), background 1.2s ease; }
 .temp-bar-labels { display: flex; justify-content: space-between; margin-top: 2px; font-family: var(--mono); font-size: 0.68rem; color: var(--text3); }
 .forecast-high { font-size: 0.95rem; font-weight: 300; text-align: right; white-space: nowrap; }
 .forecast-pop { font-family: var(--mono); font-size: 0.72rem; color: #64aaff; text-align: right; white-space: nowrap; min-width: 28px; }

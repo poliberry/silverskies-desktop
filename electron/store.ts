@@ -5,7 +5,9 @@ import {
   ConfigFile,
   DEFAULT_CONFIG,
   DEFAULT_LOCATIONS,
+  DEFAULT_SESSION,
   LocationsFile,
+  SessionFile,
 } from "./types";
 
 function userDataDir(): string {
@@ -67,8 +69,16 @@ class JsonStore<T extends object> {
     this.cache = data;
     // Serialize writes so rapid-fire updates (e.g. dragging a slider) can't
     // race and corrupt the file with an out-of-order rename.
-    this.writeQueue = this.writeQueue.then(() => writeJsonAtomic(this.filePath(), data));
-    await this.writeQueue;
+    const task = this.writeQueue.then(() => writeJsonAtomic(this.filePath(), data));
+    // Recover the chain regardless of outcome — without this, a single
+    // failed write (disk full, permissions, a transient I/O error) leaves
+    // `writeQueue` permanently rejected, and every future write() call
+    // chains onto it via `.then()`, which short-circuits straight to
+    // rejection without ever calling writeJsonAtomic again. Mirrors
+    // update()'s same recovery below; the caller of *this* write() still
+    // sees the failure via the unswallowed `task` awaited next.
+    this.writeQueue = task.catch(() => {});
+    await task;
     return data;
   }
 
@@ -89,3 +99,8 @@ class JsonStore<T extends object> {
 
 export const locationsStore = new JsonStore<LocationsFile>("locations.json", DEFAULT_LOCATIONS);
 export const configStore = new JsonStore<ConfigFile>("config.json", DEFAULT_CONFIG);
+// Snapshot of currently-open radar/conditions pop-out windows (role,
+// instance pairing, last-known location, bounds) — restored on launch when
+// uiMode is "advanced". See registerWindowIpcHandlers/saveSessionSnapshot
+// in main.ts.
+export const sessionStore = new JsonStore<SessionFile>("session.json", DEFAULT_SESSION);

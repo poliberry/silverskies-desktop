@@ -41,7 +41,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         />
       </head>
       <body className="h-full">
-        <div id="top-glow" />
+        {/* #top-glow used to live here unconditionally, which meant every
+            pop-out window (radar/conditions/alert) inherited the main
+            window's animated gradient sweep too. It's now rendered from
+            Shell.tsx itself, so only the main window shows it. */}
         <Providers>{children}</Providers>
       </body>
     </html>

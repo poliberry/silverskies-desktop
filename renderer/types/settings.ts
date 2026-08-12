@@ -20,12 +20,17 @@ export interface LocationsFile {
   activeLocationId: string | null;
 }
 
+export type UiModePref = "classic" | "advanced";
+
 export interface ConfigFile {
   provider: WeatherProviderId;
   accuWeatherApiKey: string | null;
   /** WillyWeather API key — powers Australian BOM warnings/alerts (WillyWeather
    * re-publishes BOM's own warning feed under a documented, keyed public API). */
   willyWeatherApiKey: string | null;
+  /** Powers the wind/temperature/precipitation tile overlays and the AQI
+   * badge on the radar map(s) — see lib/overlays/openweathermap.ts. */
+  openWeatherMapApiKey: string | null;
   libreWxrHost: string;
   units: UnitPref;
   timeFormat: TimeFormatPref;
@@ -37,4 +42,7 @@ export interface ConfigFile {
    * an alerts-panel banner when the active location falls inside a risk
    * category. */
   spcOutlookEnabled: boolean;
+  /** "classic" is today's single-window layout; "advanced" surfaces the
+   * radar pop-out/multi-instance affordances. */
+  uiMode: UiModePref;
 }

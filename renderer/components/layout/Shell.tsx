@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ipc } from "@/lib/ipc-client";
 import { TopBar } from "./TopBar";
 import { LeftSidebar } from "./LeftSidebar";
 import { RightSidebar } from "./RightSidebar";
@@ -13,6 +14,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useWeather } from "@/hooks/useWeather";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useSpcOutlook } from "@/hooks/useSpcOutlook";
+import { useRadarSettings } from "@/hooks/useRadarSettings";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 import { useConditionAccent } from "@/hooks/useConditionAccent";
 import { useSeverePulse } from "@/hooks/useSeverePulse";
@@ -38,6 +40,61 @@ export function Shell() {
   const alertsQuery = useAlerts(active?.lat ?? null, active?.lon ?? null);
   const spcOutlookEnabled = config?.spcOutlookEnabled ?? true;
   const spcOutlookQuery = useSpcOutlook(spcOutlookEnabled);
+  // The main window's own docked radar instance — a pop-out radar window
+  // owns a completely separate one (see RadarWindow.tsx), never synced with
+  // this one, by design.
+  const radarSettings = useRadarSettings();
+  const isAdvancedUi = (config?.uiMode ?? "classic") === "advanced";
+  // True once the main window's own radar has been undocked into its own
+  // window (see TopBar's "Pop Out" button) — the middle column then gives
+  // the audit log the full column instead of sharing it with the map.
+  // Starts `null` ("not yet known") rather than `false` — the actual
+  // pop-out window can already exist when Shell mounts (surviving a
+  // main-window reload, or recreated from session.json on relaunch), and
+  // asking main for the real state is an async IPC round trip. Defaulting
+  // to `false` would flash the docked radar (mounting LeafletRadarMap,
+  // firing its own network requests) for a moment before flipping to
+  // undocked once that reply arrives; treating `null` as "render neither"
+  // avoids that transient duplicate-radar window entirely.
+  const [radarPoppedOut, setRadarPoppedOut] = useState<boolean | null>(null);
+  // Guards handlePopOutRadar against firing twice — a ref rather than just
+  // checking `radarPoppedOut` in the handler, because two clicks fired
+  // before React has re-rendered (and handed the button a fresh closure
+  // reflecting the first click's setRadarPoppedOut(true)) both see the same
+  // *stale* `radarPoppedOut` from the render they were attached in. A ref
+  // updates synchronously, independent of the render cycle, so the second
+  // click reliably sees it even when the state check alone wouldn't.
+  const popoutRequestInFlightRef = useRef(false);
+  useEffect(
+    () =>
+      ipc.windows.onPrimaryRadarClosed(() => {
+        setRadarPoppedOut(false);
+        popoutRequestInFlightRef.current = false;
+      }),
+    [],
+  );
+  useEffect(() => {
+    let cancelled = false;
+    void ipc.windows.isPrimaryRadarOpen().then((open) => {
+      if (!cancelled) setRadarPoppedOut(open);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  // Classic mode has no in-app way to redock (the Pop Out button only
+  // renders in advanced mode) — without this, switching Settings → Interface
+  // from Advanced to Classic while undocked left the main window with no
+  // visible radar at all, and no way to get one back short of manually
+  // closing the separate radar window. The orphaned pop-out (if the user
+  // had one) is left open and fully functional on its own; only Shell's
+  // own docked/undocked layout is forced back to docked.
+  useEffect(() => {
+    if (!isAdvancedUi) {
+      setRadarPoppedOut(false);
+      popoutRequestInFlightRef.current = false;
+    }
+  }, [isAdvancedUi]);
   const [demoAlerts, setDemoAlerts] = useState<NormalizedAlert[]>([]);
   // The asteroid easter egg forces a specific pulse color directly rather
   // than deriving one from alert classification (it isn't a real hazard
@@ -99,14 +156,35 @@ export function Shell() {
     if (saved) selectSaved(saved.id);
   }
 
+  function handlePopOutRadar() {
+    // Without this guard, double-clicking (or any two clicks landing before
+    // React re-renders) both read the same stale, pre-update closure and
+    // fire ipc.windows.openRadar twice — since neither call passes an
+    // instanceId, main treats each as a *separate* primary radar, only
+    // ever tracks the last one, and the first becomes an orphaned duplicate
+    // that redocking never closes.
+    if (radarPoppedOut || popoutRequestInFlightRef.current) return;
+    popoutRequestInFlightRef.current = true;
+    setRadarPoppedOut(true);
+    void ipc.windows.openRadar({
+      location: active ? { lat: active.lat, lon: active.lon, label: active.label } : null,
+      isPrimaryPopout: true,
+    });
+  }
+
+  function handleNewRadarWindow() {
+    void ipc.windows.openRadar({
+      location: active ? { lat: active.lat, lon: active.lon, label: active.label } : null,
+    });
+  }
+
   return (
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: "var(--bg)" }}>
-      {/* #top-glow (app/layout.tsx) is a fixed strip right at the window's
-          top edge with a soft blur that reaches past its own 4px height —
-          this top padding just gives it room to fade out before reaching
-          the TopBar's text, without covering the glow itself (it needs to
-          stay visible, just not wash over the row below it). */}
-      <div className="px-4 pt-6 pb-2">
+      {/* Only the main window gets the animated gradient sweep — pop-out
+          radar/conditions/alert windows render their own root component
+          instead of Shell, so they never pick this up. */}
+      <div id="top-glow" />
+      <div style={{ padding: "12px 12px 0" }}>
         <TopBar
           locationLabel={active?.label ?? "—"}
           locationSub={
@@ -124,6 +202,10 @@ export function Shell() {
           onSetUnit={(u) => updateConfig({ units: u })}
           timezone={weatherQuery.data?.timezone}
           timeFormat={timeFormat}
+          showRadarWindowActions={isAdvancedUi}
+          radarPoppedOut={radarPoppedOut === true}
+          onPopOutRadar={handlePopOutRadar}
+          onNewRadarWindow={handleNewRadarWindow}
         />
       </div>
 
@@ -150,20 +232,29 @@ export function Shell() {
         />
 
         <div className="flex min-h-0 flex-col gap-4">
-          <div className="min-h-0" style={{ flex: "2 1 0%" }}>
-            {active && (
-              <RadarMap
-                lat={active.lat}
-                lon={active.lon}
-                label={active.label}
-                libreWxrHost={libreWxrHost}
-                theme={resolvedTheme}
-                preloadLocations={savedLocations}
-                spcOutlookEnabled={spcOutlookEnabled}
-              />
-            )}
-          </div>
-          <div className="glass-card min-h-0 p-3" style={{ flex: "1 1 0%" }}>
+          {/* Strictly `=== false`, not `!radarPoppedOut` — while it's still
+              `null` (state not yet confirmed with main), rendering nothing
+              here is what avoids briefly mounting a duplicate docked radar
+              that then immediately unmounts once the real state arrives. */}
+          {radarPoppedOut === false && (
+            <div className="min-h-0" style={{ flex: "2 1 0%" }}>
+              {active && (
+                <RadarMap
+                  lat={active.lat}
+                  lon={active.lon}
+                  label={active.label}
+                  libreWxrHost={libreWxrHost}
+                  theme={resolvedTheme}
+                  preloadLocations={savedLocations}
+                  spcOutlookEnabled={spcOutlookEnabled}
+                  settings={radarSettings}
+                />
+              )}
+            </div>
+          )}
+          {/* Popping the radar out frees the whole column for the audit log
+              instead of splitting it 2:1 with the map. */}
+          <div className="glass-card min-h-0 p-3" style={{ flex: radarPoppedOut === true ? "1 1 100%" : "1 1 0%" }}>
             <AlertLog
               alerts={alertsQuery.data ?? []}
               isLoading={alertsQuery.isLoading}
