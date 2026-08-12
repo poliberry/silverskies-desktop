@@ -1,51 +1,29 @@
 "use client";
 
 import { RadarPlaybackBar, type RadarPlaybackBarProps } from "./RadarPlaybackBar";
-import { RadarSettingsControls, type RadarSettingsControlsProps } from "./RadarSettingsControls";
+import { RadarSettingsDropdowns } from "./RadarSettingsDropdowns";
+import type { RadarSettings } from "@/hooks/useRadarSettings";
+import type { LibreWxrColorScheme } from "@/lib/alerts/librewxr";
 
-export type RadarControlsProps = RadarPlaybackBarProps & RadarSettingsControlsProps;
+export interface RadarControlsProps extends RadarPlaybackBarProps {
+  colorSchemes: LibreWxrColorScheme[];
+  settings: RadarSettings;
+  overlaysAvailable: boolean;
+}
 
 /**
  * The docked main-window radar's combined control bar — playback on top,
- * radar settings below, in one card. Pop-out radar windows instead render
- * RadarPlaybackBar under the map and RadarSettingsControls up in the alt
- * bar (RadarWindowToolbar), so those two are kept as separate components;
- * this is just the original single-bar composition preserved as-is for
- * LeafletRadarMap's default (non-pop-out) usage.
+ * radar settings (as compact dropdowns — see RadarSettingsDropdowns) below,
+ * in one card. Pop-out radar windows instead render RadarPlaybackBar under
+ * the map and RadarSettingsDropdowns up in the alt bar (RadarWindowToolbar),
+ * so those two stay separate components; this is just the original
+ * single-bar composition for LeafletRadarMap's default (non-pop-out) usage.
  */
-export function RadarControls(props: RadarControlsProps) {
+export function RadarControls({ colorSchemes, settings, overlaysAvailable, ...playback }: RadarControlsProps) {
   return (
     <div className="glass-card flex flex-col gap-2 p-3">
-      <RadarPlaybackBar
-        frames={props.frames}
-        nowcastStartIndex={props.nowcastStartIndex}
-        selectedIndex={props.selectedIndex}
-        onSelectIndex={props.onSelectIndex}
-        isPlaying={props.isPlaying}
-        onTogglePlay={props.onTogglePlay}
-        isLive={props.isLive}
-        onJumpToLive={props.onJumpToLive}
-      />
-      <RadarSettingsControls
-        colorSchemes={props.colorSchemes}
-        colorScheme={props.colorScheme}
-        onColorSchemeChange={props.onColorSchemeChange}
-        showArrows={props.showArrows}
-        onToggleArrows={props.onToggleArrows}
-        showCells={props.showCells}
-        onToggleCells={props.onToggleCells}
-        showPolygons={props.showPolygons}
-        onTogglePolygons={props.onTogglePolygons}
-        showWindOverlay={props.showWindOverlay}
-        onToggleWindOverlay={props.onToggleWindOverlay}
-        showTempOverlay={props.showTempOverlay}
-        onToggleTempOverlay={props.onToggleTempOverlay}
-        showPrecipOverlay={props.showPrecipOverlay}
-        onTogglePrecipOverlay={props.onTogglePrecipOverlay}
-        showAqiOverlay={props.showAqiOverlay}
-        onToggleAqiOverlay={props.onToggleAqiOverlay}
-        overlaysAvailable={props.overlaysAvailable}
-      />
+      <RadarPlaybackBar {...playback} />
+      <RadarSettingsDropdowns colorSchemes={colorSchemes} settings={settings} overlaysAvailable={overlaysAvailable} />
     </div>
   );
 }

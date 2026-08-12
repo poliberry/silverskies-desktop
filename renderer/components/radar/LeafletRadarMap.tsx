@@ -423,7 +423,7 @@ export function LeafletRadarMap({
             <button
               type="button"
               className="flex w-full items-center justify-between gap-2"
-              style={{ height: 18, background: "none", border: "none", padding: 0, color: "inherit", cursor: "pointer", font: "inherit" }}
+              style={{ background: "none", border: "none", padding: "6px 0", color: "inherit", cursor: "pointer", font: "inherit" }}
               onClick={() => setShowPlaybackBar((v) => !v)}
               aria-expanded={showPlaybackBar}
             >
