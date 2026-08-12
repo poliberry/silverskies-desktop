@@ -18,7 +18,10 @@ export function HourlyRow({
   const cards = selectUpcomingHours(hourly);
 
   return (
-    <div className="hourly-scroll thin-scroll" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 6 }}>
+    <div
+      className="hourly-scroll thin-scroll"
+      style={{ display: "flex", gap: 8, overflowX: "auto", paddingTop: 6, paddingBottom: 6 }}
+    >
       {cards.map((h, i) => (
         <div key={h.time} className={`hour-card ${i === 0 ? "now" : ""}`}>
           <div className="hour-time">{i === 0 ? "NOW" : fmtHourLabel(h.time, timeFormat)}</div>

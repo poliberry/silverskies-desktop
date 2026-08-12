@@ -6,14 +6,21 @@ import type { DailyPoint } from "@/types/weather";
 import type { UnitPref } from "@/types/settings";
 
 export function ForecastList({ daily, unit }: { daily: DailyPoint[]; unit: UnitPref }) {
+  // The bar for each day should show where *that day's* low–high range sits
+  // within the week's overall range — not just each day's high as a width
+  // from the track's left edge (the previous behavior), which made a mild
+  // day and a scorching day with the same high look identical.
+  const lows = daily.map((d) => d.tempMinC);
   const highs = daily.map((d) => d.tempMaxC);
-  const minH = Math.min(...highs);
-  const maxH = Math.max(...highs);
+  const weekMin = Math.min(...lows);
+  const weekMax = Math.max(...highs);
+  const weekRange = weekMax - weekMin;
 
   return (
     <div className="flex flex-col gap-1.5">
       {daily.map((d, i) => {
-        const pct = maxH === minH ? 50 : Math.round(((d.tempMaxC - minH) / (maxH - minH)) * 100);
+        const leftPct = weekRange === 0 ? 0 : ((d.tempMinC - weekMin) / weekRange) * 100;
+        const widthPct = weekRange === 0 ? 100 : ((d.tempMaxC - d.tempMinC) / weekRange) * 100;
         const pop = d.precipitationProbabilityMaxPct || 0;
         return (
           <div key={d.date} className={`forecast-row ${i === 0 ? "today" : ""}`}>
@@ -23,7 +30,7 @@ export function ForecastList({ daily, unit }: { daily: DailyPoint[]; unit: UnitP
             </div>
             <div>
               <div className="temp-bar-bg">
-                <div className="temp-bar-fill" style={{ width: `${pct}%` }} />
+                <div className="temp-bar-fill" style={{ left: `${leftPct}%`, width: `${widthPct}%` }} />
               </div>
               <div className="temp-bar-labels">
                 <span>
