@@ -622,5 +622,18 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform === "darwin") return;
+  // scheduleSessionSave() debounces by 500ms — if the app quit before that
+  // timer fired, the on-disk snapshot would still list whatever window(s)
+  // just closed, and relaunch would incorrectly try to restore them. Cancel
+  // the pending debounce and write the final state (the `windows` map is
+  // already up to date here — each window's own 'closed' handler removes it
+  // synchronously, before 'window-all-closed' fires) before actually quitting.
+  if (saveSessionTimer) {
+    clearTimeout(saveSessionTimer);
+    saveSessionTimer = null;
+  }
+  void saveSessionSnapshot()
+    .catch((err) => console.error("[session] failed to flush session snapshot before quit:", err))
+    .finally(() => app.quit());
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ipc } from "@/lib/ipc-client";
 import { TopBar } from "./TopBar";
 import { LeftSidebar } from "./LeftSidebar";
@@ -57,7 +57,22 @@ export function Shell() {
   // undocked once that reply arrives; treating `null` as "render neither"
   // avoids that transient duplicate-radar window entirely.
   const [radarPoppedOut, setRadarPoppedOut] = useState<boolean | null>(null);
-  useEffect(() => ipc.windows.onPrimaryRadarClosed(() => setRadarPoppedOut(false)), []);
+  // Guards handlePopOutRadar against firing twice — a ref rather than just
+  // checking `radarPoppedOut` in the handler, because two clicks fired
+  // before React has re-rendered (and handed the button a fresh closure
+  // reflecting the first click's setRadarPoppedOut(true)) both see the same
+  // *stale* `radarPoppedOut` from the render they were attached in. A ref
+  // updates synchronously, independent of the render cycle, so the second
+  // click reliably sees it even when the state check alone wouldn't.
+  const popoutRequestInFlightRef = useRef(false);
+  useEffect(
+    () =>
+      ipc.windows.onPrimaryRadarClosed(() => {
+        setRadarPoppedOut(false);
+        popoutRequestInFlightRef.current = false;
+      }),
+    [],
+  );
   useEffect(() => {
     let cancelled = false;
     void ipc.windows.isPrimaryRadarOpen().then((open) => {
@@ -75,7 +90,10 @@ export function Shell() {
   // had one) is left open and fully functional on its own; only Shell's
   // own docked/undocked layout is forced back to docked.
   useEffect(() => {
-    if (!isAdvancedUi) setRadarPoppedOut(false);
+    if (!isAdvancedUi) {
+      setRadarPoppedOut(false);
+      popoutRequestInFlightRef.current = false;
+    }
   }, [isAdvancedUi]);
   const [demoAlerts, setDemoAlerts] = useState<NormalizedAlert[]>([]);
   // The asteroid easter egg forces a specific pulse color directly rather
@@ -139,6 +157,14 @@ export function Shell() {
   }
 
   function handlePopOutRadar() {
+    // Without this guard, double-clicking (or any two clicks landing before
+    // React re-renders) both read the same stale, pre-update closure and
+    // fire ipc.windows.openRadar twice — since neither call passes an
+    // instanceId, main treats each as a *separate* primary radar, only
+    // ever tracks the last one, and the first becomes an orphaned duplicate
+    // that redocking never closes.
+    if (radarPoppedOut || popoutRequestInFlightRef.current) return;
+    popoutRequestInFlightRef.current = true;
     setRadarPoppedOut(true);
     void ipc.windows.openRadar({
       location: active ? { lat: active.lat, lon: active.lon, label: active.label } : null,
