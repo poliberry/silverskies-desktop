@@ -16,7 +16,10 @@ export interface WindCompassProps {
 export function WindCompass({ directionDeg, loading }: WindCompassProps) {
   return (
     <div className="wind-compass" aria-hidden="true">
-      <div className="wind-compass-needle" style={{ transform: `rotate(${directionDeg}deg)`, opacity: loading ? 0.3 : 1 }} />
+      <div
+        className={`wind-compass-needle${loading ? " is-loading" : ""}`}
+        style={{ transform: `rotate(${directionDeg}deg)` }}
+      />
     </div>
   );
 }

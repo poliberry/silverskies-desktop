@@ -722,6 +722,16 @@ body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
   transition: transform 0.6s ease, opacity 0.3s ease;
   animation: wind-compass-pulse 2.2s ease-in-out infinite;
 }
+/* The pulse animation above continuously writes `opacity` every frame,
+   which otherwise wins over the loading state's inline `opacity: 0.3` (an
+   animated property always overrides an element's own inline value for
+   that property) — stale/unavailable wind direction would still read as
+   "live" at 0.7-1 opacity. Drop the animation entirely while loading so
+   the dimmed opacity actually sticks. */
+.wind-compass-needle.is-loading {
+  animation: none;
+  opacity: 0.3;
+}
 @keyframes wind-compass-pulse {
   0%, 100% { opacity: 0.7; }
   50% { opacity: 1; }

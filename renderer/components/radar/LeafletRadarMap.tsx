@@ -388,12 +388,15 @@ export function LeafletRadarMap({
   }, [latestFrameTime, latestObservedIndex]);
 
   useEffect(() => {
-    if (!isPlaying || frames.length < 2) return;
+    // A station's own WMS image doesn't respond to the composite frame
+    // index at all — no point ticking it forward in the background (or
+    // burning CPU/triggering re-renders) while it's not visible.
+    if (!isPlaying || frames.length < 2 || selectedStation) return;
     const id = setInterval(() => {
       setSelectedIndex((i) => (i + 1) % frames.length);
     }, 800);
     return () => clearInterval(id);
-  }, [isPlaying, frames.length]);
+  }, [isPlaying, frames.length, selectedStation]);
 
   const currentFrame = frames[selectedIndex];
   const tileOpts = useMemo(
@@ -560,6 +563,7 @@ export function LeafletRadarMap({
             colorSchemes={weatherMaps?.radar.colorSchemes ?? []}
             settings={settings}
             overlaysAvailable={overlaysAvailable}
+            disabled={Boolean(selectedStation)}
           />
         ) : (
           // Pop-out windows: playback collapses to a slim toggle strip by
@@ -576,7 +580,7 @@ export function LeafletRadarMap({
               <span className="flex items-center gap-1.5 font-mono" style={{ fontSize: "0.7rem", color: "var(--text3)" }}>
                 <i className="ph ph-clock-counter-clockwise" aria-hidden="true" />
                 Playback
-                {isLive && (
+                {!selectedStation && isLive && (
                   <span style={{ color: "var(--danger)" }} className="tracking-wider">
                     · LIVE
                   </span>
@@ -595,6 +599,7 @@ export function LeafletRadarMap({
                   onTogglePlay={() => setIsPlaying((v) => !v)}
                   isLive={isLive}
                   onJumpToLive={() => setSelectedIndex(latestObservedIndex)}
+                  disabled={Boolean(selectedStation)}
                 />
               </div>
             )}
