@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSettings } from "@/hooks/useSettings";
 import { ALERT_TYPE_CATALOG, type AlertTypeEntry } from "@/lib/alerts/alertTypeCatalog";
 import { resolveAlertColor } from "@/lib/alerts/color.client";
@@ -28,7 +28,11 @@ function AlertTypeRow({
   cssClass: string;
   label: string;
   override: Override | undefined;
-  onChange: (next: Override | undefined) => void;
+  // A patch, not a full replacement — setOverride merges it against the
+  // latest known state for this row, not against this stale render-time
+  // `override` prop, so two fields (or two rows) edited in quick
+  // succession can't clobber each other.
+  onChange: (patch: Partial<Override> | null) => void;
 }) {
   // This panel only ever mounts client-side (inside an already-open Settings
   // dialog), so reading the CSS-defined default color via a lazy initial
@@ -45,7 +49,7 @@ function AlertTypeRow({
       <input
         type="color"
         value={color}
-        onChange={(e) => onChange({ ...override, color: e.target.value })}
+        onChange={(e) => onChange({ color: e.target.value })}
         className="h-6 w-8 shrink-0 cursor-pointer rounded-sm border-0 bg-transparent p-0"
         title="Polygon color"
       />
@@ -53,14 +57,14 @@ function AlertTypeRow({
         {label}
       </span>
       {hasOverride && (
-        <button className="unit-btn" style={{ fontSize: "0.6rem" }} onClick={() => onChange(undefined)}>
+        <button className="unit-btn" style={{ fontSize: "0.6rem" }} onClick={() => onChange(null)}>
           RESET
         </button>
       )}
       <button
         className={`unit-btn ${visible ? "active" : ""}`}
         style={{ fontSize: "0.6rem" }}
-        onClick={() => onChange({ ...override, visible: !visible })}
+        onClick={() => onChange({ visible: !visible })}
       >
         {visible ? "ON" : "OFF"}
       </button>
@@ -69,20 +73,36 @@ function AlertTypeRow({
 }
 
 export function AlertTypesPanel() {
-  const { config, updateConfig } = useSettings();
+  const { config, updateConfigAsync } = useSettings();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // Tracks the latest known alertTypeOverrides independent of React's
+  // render cycle — setOverride reads/writes this instead of the `config`
+  // closure so a burst of edits (same row or different rows) serializes
+  // through queueRef and always merges against the real prior result
+  // rather than whatever was on screen when each click happened.
+  const overridesRef = useRef<Record<string, Override>>(config?.alertTypeOverrides ?? {});
+  const queueRef = useRef<Promise<unknown>>(Promise.resolve());
+
+  useEffect(() => {
+    overridesRef.current = config?.alertTypeOverrides ?? {};
+  }, [config?.alertTypeOverrides]);
 
   if (!config) return null;
   const overrides = config.alertTypeOverrides ?? {};
 
-  function setOverride(cssClass: string, next: Override | undefined) {
-    const nextOverrides = { ...overrides };
-    if (!next || (next.visible === undefined && next.color === undefined)) {
-      delete nextOverrides[cssClass];
-    } else {
-      nextOverrides[cssClass] = next;
-    }
-    updateConfig({ alertTypeOverrides: nextOverrides });
+  function setOverride(cssClass: string, patch: Partial<Override> | null) {
+    queueRef.current = queueRef.current.catch(() => {}).then(async () => {
+      const nextOverrides = { ...overridesRef.current };
+      const merged: Override | undefined = patch === null ? undefined : { ...nextOverrides[cssClass], ...patch };
+      if (!merged || (merged.visible === undefined && merged.color === undefined)) {
+        delete nextOverrides[cssClass];
+      } else {
+        nextOverrides[cssClass] = merged;
+      }
+      const result = await updateConfigAsync({ alertTypeOverrides: nextOverrides });
+      overridesRef.current = result.alertTypeOverrides ?? nextOverrides;
+    });
   }
 
   function toggleGroup(group: string) {

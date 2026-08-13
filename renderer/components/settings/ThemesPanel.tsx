@@ -26,7 +26,15 @@ export function ThemesPanel() {
   if (!config) return null;
   const themeId = config.themeId ?? "default";
 
-  function applyTheme(theme: ThemeDefinition) {
+  // Builtin selection stores the builtin's own id — not the theme object —
+  // so a custom theme that happens to share a builtin's display name (e.g.
+  // a user's own "Nord Blue") is never mistaken for the real preset.
+  function selectBuiltinTheme(id: string) {
+    setError(null);
+    updateConfig({ themeId: id });
+  }
+
+  function applyCustomTheme(theme: ThemeDefinition) {
     setError(null);
     updateConfig({ themeId: "custom", customTheme: theme });
   }
@@ -38,7 +46,7 @@ export function ThemesPanel() {
       setError(result.error.message);
       return;
     }
-    applyTheme(result.theme);
+    applyCustomTheme(result.theme);
   }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -52,7 +60,7 @@ export function ThemesPanel() {
       return;
     }
     setPasteDraft(text);
-    applyTheme(result.theme);
+    applyCustomTheme(result.theme);
   }
 
   return (
@@ -77,10 +85,8 @@ export function ThemesPanel() {
             <button
               key={theme.id}
               className="glass-card flex flex-col gap-2 p-2.5 text-left"
-              style={{
-                borderColor: themeId === "custom" && config.customTheme?.name === theme.name ? "var(--border-active)" : "var(--border)",
-              }}
-              onClick={() => applyTheme(theme)}
+              style={{ borderColor: themeId === theme.id ? "var(--border-active)" : "var(--border)" }}
+              onClick={() => selectBuiltinTheme(theme.id)}
             >
               <ThemeSwatch colors={theme.colors} />
               <span className="font-mono text-[0.68rem] uppercase tracking-wider" style={{ color: "var(--text2)" }}>

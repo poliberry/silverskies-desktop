@@ -186,14 +186,24 @@ function AlertPolygonsLayer({ host }: { host: string }) {
     return true;
   });
 
-  const withGeometryKey = deduped.map((a) => a.id).join(",");
+  // Includes geometry-presence and (for still-missing alerts) the affected
+  // zone list, not just the id — otherwise an alert whose geometry or
+  // affectedZones arrives/changes on a later upstream refetch wouldn't
+  // change this key at all, and fillMissingGeometry's cached result would
+  // stay stuck on the earlier (missing) geometry for the rest of the
+  // session despite staleTime: Infinity being otherwise correct for a
+  // truly unchanged set of inputs.
+  const withGeometryKey = deduped
+    .map((a) => `${a.id}:${a.geometry ? "g" : (a.affectedZones ?? []).join("+")}`)
+    .join(",");
   const { data: filled } = useQuery({
     queryKey: ["alert-polygons-filled", withGeometryKey],
     queryFn: () => fillMissingGeometry(deduped),
     enabled: deduped.length > 0,
     // The inputs (deduped) are already the resolved query data above, so
     // there's nothing to periodically refetch here — a new key (different
-    // alerts) is what triggers a re-run.
+    // alerts, or an existing alert's geometry/zones changing) is what
+    // triggers a re-run.
     staleTime: Infinity,
   });
 

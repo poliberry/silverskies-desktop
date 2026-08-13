@@ -4,7 +4,10 @@ import type { AlertGeometry, NormalizedAlert } from "@/types/alerts";
 // re-fetching the same county/zone shape for every alert that references it
 // (a single Winter Storm Watch can span dozens of counties, and many alerts
 // share the same zones across refetches).
-const zoneCache = new Map<string, AlertGeometry | null>();
+// Only successful lookups are cached — a transient failure or a 5xx
+// shouldn't permanently blank a zone out for the rest of the session, so
+// misses are never written here and simply get retried on the next call.
+const zoneCache = new Map<string, AlertGeometry>();
 
 // Bounds the fan-out for a single alert covering an unusually large number
 // of zones (e.g. a statewide advisory) — the goal is "renders somewhere
@@ -12,19 +15,19 @@ const zoneCache = new Map<string, AlertGeometry | null>();
 const MAX_ZONES_PER_ALERT = 30;
 
 async function fetchZoneGeometry(url: string): Promise<AlertGeometry | null> {
-  if (zoneCache.has(url)) return zoneCache.get(url) ?? null;
-  let result: AlertGeometry | null = null;
+  const cached = zoneCache.get(url);
+  if (cached) return cached;
   try {
     const r = await fetch(url, { headers: { Accept: "application/geo+json" } });
-    if (r.ok) {
-      const d = await r.json();
-      if (d.geometry) result = d.geometry as AlertGeometry;
-    }
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (!d.geometry) return null;
+    const geometry = d.geometry as AlertGeometry;
+    zoneCache.set(url, geometry);
+    return geometry;
   } catch {
-    // Left as null — this zone just won't contribute to the combined shape.
+    return null;
   }
-  zoneCache.set(url, result);
-  return result;
 }
 
 /** Flattens any mix of Polygon/MultiPolygon zone shapes into one MultiPolygon's

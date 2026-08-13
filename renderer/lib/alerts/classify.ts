@@ -5,7 +5,10 @@
 
 type ClassRule = [RegExp, string];
 
-const ALERT_CLASS_MAP: ClassRule[] = [
+// Exported so the Settings → Alerts catalog (alertTypeCatalog.ts) can
+// enumerate every real classifier output instead of only the ones a
+// DEMO_ALERT_GROUPS event happens to reach.
+export const ALERT_CLASS_MAP: ClassRule[] = [
   // Tornado (Emergency/PDS/Observed are detected from headline text, below)
   [/tornado warning/i, "alert-tornado-warning"],
   [/tornado watch/i, "alert-tornado-watch"],
