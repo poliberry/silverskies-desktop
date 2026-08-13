@@ -106,6 +106,10 @@ export const ipc = {
       if (!window.silverSkies) { warnNoBridge(); return; }
       return window.silverSkies.updater.check();
     },
+    async download(): Promise<void> {
+      if (!window.silverSkies) { warnNoBridge(); return; }
+      return window.silverSkies.updater.download();
+    },
     async install(): Promise<void> {
       if (!window.silverSkies) { warnNoBridge(); return; }
       return window.silverSkies.updater.install();

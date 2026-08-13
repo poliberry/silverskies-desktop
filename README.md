@@ -60,6 +60,21 @@ Defaults to the public instance at `https://api.librewxr.net` — no setup requi
 later self-host LibreWXR (see [librewxr.net](https://librewxr.net)), point Settings →
 "LibreWXR Radar Host" at your own server URL instead.
 
+## Radar stations (WSR-88D)
+
+An opt-in map layer (Radar → Layers → "Radar Stations") showing all 159 US NEXRAD (WSR-88D)
+sites, sourced from the official, keyless NWS API (`api.weather.gov/radar/stations`) — that's
+also where the scan time, VCP, and operability status shown in each station's panel come from.
+Clicking a station opens its own radar viewer: five real single-site Level 3 products
+(Reflectivity, Velocity, Hydrometeor Classification, Storm Total Precip, 1-Hr Accumulation) via
+NOAA/NCEP's public GeoServer WMS (`opengeo.ncep.noaa.gov`, confirmed against its own
+GetCapabilities — no key needed, CORS open), plus the station's current wind and a purely
+decorative sweep animation (not geo-synced to a real antenna azimuth — no free feed exposes
+that). US-only by design: this is NOAA's own network, and there's no equivalent free,
+individually-viewable radar-site imagery for the rest of the world the way there is for NEXRAD.
+"FastScan" labels VCPs that include supplemental SAILS/MESO-SAILS low-level scans — the closest
+real, documented NEXRAD concept to that name.
+
 ## Development
 
 ```bash
@@ -116,15 +131,18 @@ you want signed builds out of that pipeline too.
 
 ### Auto-update
 
-`electron-updater` is wired up (`main.ts` calls `checkForUpdatesAndNotify()` on launch, packaged
-builds only) and `publish.owner`/`publish.repo` in `package.json` point at this repo — installed
-builds will check this repo's GitHub Releases on launch and update themselves once you publish a
-release with a higher version than what's installed.
+`electron-updater` is wired up (`main.ts` calls `checkForUpdates()` on launch, packaged builds
+only) and `publish.owner`/`publish.repo` in `package.json` point at this repo — installed builds
+will silently check this repo's GitHub Releases on launch, but never download or install anything
+without you saying so: `autoDownload` and `autoInstallOnAppQuit` are both off.
 
-Settings → About also exposes a manual "Check for Updates" button and shows live status (checking,
-downloading with percent, downloaded/ready-to-install with a "Restart & Install" button, or a plain
-explanation when running an unpackaged/dev build, which has no update feed at all) — `main.ts`
-forwards `electron-updater`'s own events over IPC for this rather than duplicating its logic.
+Settings → About is where you act on that: version + Electron/Chromium/Node/platform details, a
+manual "Check for Updates" button, and — once a check finds something — a "Download Update" button,
+then a "Restart & Install" button once the download finishes. Live status (checking, available,
+downloading with percent, downloaded, error, or a plain explanation when running an
+unpackaged/dev build, which has no update feed at all) comes from `main.ts` forwarding
+`electron-updater`'s own events over IPC, with the last-known status cached so reopening the tab
+after the fact still reflects it correctly.
 
 ### App icon
 

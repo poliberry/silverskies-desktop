@@ -25,25 +25,15 @@ import { RadarLegend } from "./RadarLegend";
 import { RadarTileCrossfade } from "./RadarTileCrossfade";
 import { WeatherTileOverlay } from "./overlays/WeatherTileOverlay";
 import { AqiBadge } from "./overlays/AqiBadge";
+import { RadarStationsLayer } from "./RadarStationsLayer";
+import { StationRadarDialog } from "./StationRadarDialog";
+import { CARTO_DARK, CARTO_LIGHT, CARTO_ATTRIB } from "@/lib/basemap-tiles";
 
 // Fixed zoom level used for background tile preloading (saved locations,
 // the ring around the active one) — independent of whatever zoom the user
 // is actually looking at, since it's just meant to warm the HTTP cache
 // before they switch there.
 const PRELOAD_ZOOM = 7;
-
-const CARTO_DARK = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
-// Was pointed at bare "voyager/{z}/{x}/{y}" — that path 404s (voyager tiles
-// are only served under "/rastertiles/voyager/…"), so the *entire* light-mode
-// basemap silently failed to load, leaving the radar layer floating over a
-// blank container with nothing to give it visual context. "light_all" is
-// CARTO's muted Positron style, served at the same bare path as dark_all,
-// and (being flat/low-contrast like dark_all) is also a better basemap to
-// put a semi-transparent radar overlay on top of than the busy, colorful
-// voyager style would have been.
-const CARTO_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
-const CARTO_ATTRIB =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
 function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -239,6 +229,7 @@ export function LeafletRadarMap({
   // starts collapsed so the map gets as much of the window as possible;
   // see the "Playback" toggle strip in the render below.
   const [showPlaybackBar, setShowPlaybackBar] = useState(false);
+  const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const { colorScheme, showArrows, showCells, showPolygons } = settings;
 
   // Config (and therefore the OpenWeatherMap key) is app-wide IPC-backed
@@ -366,9 +357,11 @@ export function LeafletRadarMap({
           )}
           {showPolygons && <AlertPolygonsLayer host={libreWxrHost} />}
           <SpcOutlookLayer enabled={spcOutlookEnabled} />
+          {settings.showRadarStations && <RadarStationsLayer onSelect={setSelectedStationId} />}
           <Marker position={[lat, lon]} icon={locationIcon} />
           <RecenterOnLocationChange lat={lat} lon={lon} />
         </MapContainer>
+        <StationRadarDialog stationId={selectedStationId} onClose={() => setSelectedStationId(null)} theme={theme} />
 
         {/* Explicit z-index needed here: this overlay and the map are both
             inside the `isolate`d wrapper above, so — now that Leaflet's own
