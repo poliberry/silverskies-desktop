@@ -46,6 +46,34 @@ export interface ConfigFile {
    * category. */
   spcOutlookEnabled: boolean;
   uiMode: UiModePref;
+  /** Per alert-type (keyed by the `cssClass` taxonomy from
+   * renderer/lib/alerts/classify.ts) visibility/color overrides for the
+   * radar map's alert-polygon layer — see Settings → Alerts. Absent entry =
+   * visible, default CSS color. */
+  alertTypeOverrides: Record<string, { visible?: boolean; color?: string }>;
+  /** "default" (weather-condition-driven accent) | a builtin theme id | "custom"
+   * (uses customTheme below) — see Settings → Themes. */
+  themeId: string;
+  /** The user's last loaded/pasted custom theme JSON. */
+  customTheme: ThemeDefinition | null;
+}
+
+export interface ThemeColors {
+  a0?: string;
+  bg?: string;
+  surface?: string;
+  surface3?: string;
+  border?: string;
+  text?: string;
+  text2?: string;
+  text3?: string;
+  danger?: string;
+  safe?: string;
+}
+
+export interface ThemeDefinition {
+  name: string;
+  colors: ThemeColors;
 }
 
 /** A window's "kind" — every non-main window is one of these, carrying its
@@ -129,4 +157,7 @@ export const DEFAULT_CONFIG: ConfigFile = {
   notificationsEnabled: true,
   spcOutlookEnabled: true,
   uiMode: "classic",
+  alertTypeOverrides: {},
+  themeId: "default",
+  customTheme: null,
 };

@@ -15,6 +15,11 @@ interface NwsFeature {
     sent?: string;
     expires?: string;
     senderName?: string;
+    /** Full zone-boundary API URLs (e.g. https://api.weather.gov/zones/county/AZC009)
+     * — always present regardless of whether `geometry` is null, since many
+     * zone/county-based products (heat watches, advisories, …) never carry
+     * their own polygon. Used to synthesize a polygon when geometry is missing. */
+    affectedZones?: string[];
   };
 }
 
@@ -49,6 +54,7 @@ export async function fetchNwsAlerts(lat: number, lon: number): Promise<Normaliz
         issuingOffice: p.senderName,
         url: f.id,
         geometry: f.geometry,
+        affectedZones: p.affectedZones,
       };
     });
   } catch {

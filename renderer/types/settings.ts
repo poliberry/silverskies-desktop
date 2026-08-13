@@ -45,4 +45,33 @@ export interface ConfigFile {
   /** "classic" is today's single-window layout; "advanced" surfaces the
    * radar pop-out/multi-instance affordances. */
   uiMode: UiModePref;
+  /** Per alert-type (keyed by the `cssClass` taxonomy from lib/alerts/classify.ts)
+   * visibility/color overrides for the radar map's alert-polygon layer —
+   * see Settings → Alerts. Absent entry = visible, default CSS color. */
+  alertTypeOverrides: Record<string, { visible?: boolean; color?: string }>;
+  /** "default" (weather-condition-driven accent, see lib/theme.ts) | a
+   * builtin theme id from lib/themes/builtinThemes.ts | "custom" (uses
+   * customTheme below) — see Settings → Themes. */
+  themeId: string;
+  /** The user's last loaded/pasted custom theme JSON, kept even while a
+   * builtin theme is selected so switching back to "custom" doesn't lose it. */
+  customTheme: ThemeDefinition | null;
+}
+
+export interface ThemeColors {
+  a0?: string;
+  bg?: string;
+  surface?: string;
+  surface3?: string;
+  border?: string;
+  text?: string;
+  text2?: string;
+  text3?: string;
+  danger?: string;
+  safe?: string;
+}
+
+export interface ThemeDefinition {
+  name: string;
+  colors: ThemeColors;
 }

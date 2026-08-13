@@ -7,6 +7,7 @@ import { RadarWindowToolbar } from "./RadarWindowToolbar";
 import { useRadarSettings } from "@/hooks/useRadarSettings";
 import { useSettings } from "@/hooks/useSettings";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
+import { useAppliedTheme } from "@/hooks/useAppliedTheme";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { geocode, reverseGeocode, DEFAULT_LOCATION } from "@/lib/geocode";
 import { ipGeolocate } from "@/lib/ip-geolocate";
@@ -34,6 +35,7 @@ export function RadarWindow({ instanceId, initialLocation }: RadarWindowProps) {
   const settings = useRadarSettings();
   const { config } = useSettings();
   const theme = useResolvedTheme();
+  useAppliedTheme();
 
   const libreWxrHost = config?.libreWxrHost ?? "https://api.librewxr.net";
   const spcOutlookEnabled = config?.spcOutlookEnabled ?? true;

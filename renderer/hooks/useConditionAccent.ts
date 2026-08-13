@@ -9,10 +9,13 @@ export function useConditionAccent(
   weatherCode: number | undefined,
   isDay: boolean | undefined,
   resolvedTheme: "light" | "dark",
+  // False while a user-selected theme (Settings → Themes) is active, so its
+  // own accent color doesn't get overwritten on the next weather refetch.
+  enabled = true,
 ) {
   useEffect(() => {
-    if (weatherCode === undefined || isDay === undefined) return;
+    if (!enabled || weatherCode === undefined || isDay === undefined) return;
     const [r, g, b] = resolveAccentRgb(weatherCode, isDay, resolvedTheme);
     document.documentElement.style.setProperty("--a0", `${r},${g},${b}`);
-  }, [weatherCode, isDay, resolvedTheme]);
+  }, [weatherCode, isDay, resolvedTheme, enabled]);
 }

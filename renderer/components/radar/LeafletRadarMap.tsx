@@ -14,7 +14,9 @@ import {
   type LibreWxrFrame,
 } from "@/lib/alerts/librewxr";
 import { fetchSpcMdAlerts } from "@/lib/alerts/spc-md";
-import { resolveAlertColor } from "@/lib/alerts/color.client";
+import { fetchMergedAlerts, dedupeKey } from "@/lib/alerts/merge";
+import { fillMissingGeometry } from "@/lib/alerts/zone-geometry";
+import { resolveAlertColorWithOverrides } from "@/lib/alerts/color.client";
 import { preloadRadarFrame } from "@/lib/radar-preload";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useSpcOutlook } from "@/hooks/useSpcOutlook";
@@ -130,6 +132,9 @@ function StationRangeOverlay({ lat, lon }: { lat: number; lon: number }) {
 function AlertPolygonsLayer({ host }: { host: string }) {
   const map = useMap();
   const [bbox, setBbox] = useState<BBox>(() => boundsToBBox(map.getBounds()));
+  const { config } = useSettings();
+  const willyWeatherApiKey = config?.willyWeatherApiKey ?? null;
+  const overrides = config?.alertTypeOverrides;
 
   useMapEvents({
     moveend: () => {
@@ -155,7 +160,56 @@ function AlertPolygonsLayer({ host }: { host: string }) {
     refetchInterval: 5 * 60_000,
   });
 
-  const alerts = [...(data ?? []), ...(mdData ?? [])].filter((a) => a.geometry);
+  // The two queries above are viewport/bbox-scoped and only ever see
+  // whatever LibreWXR's relay has resolved. That relay can lag or miss
+  // alerts the authoritative NWS/ECCC/BOM feeds already have (the same
+  // feeds the audit log uses via fetchMergedAlerts) — fetching the same
+  // merged result here, keyed off the bbox's own center point, guarantees
+  // whatever's showing in the audit log for the area on screen also shows
+  // up as a polygon, without giving up the bbox queries' "see alerts
+  // anywhere I pan" behavior.
+  const centerLat = (bbox[1] + bbox[3]) / 2;
+  const centerLon = (bbox[0] + bbox[2]) / 2;
+  const { data: mergedData } = useQuery({
+    queryKey: ["merged-map-alerts", centerLat, centerLon, host, willyWeatherApiKey],
+    queryFn: () => fetchMergedAlerts(centerLat, centerLon, host, willyWeatherApiKey),
+    refetchInterval: 5 * 60_000,
+  });
+
+  const combined = [...(data ?? []), ...(mdData ?? []), ...(mergedData ?? [])];
+  const seen = new Set<string>();
+  const deduped = combined.filter((a) => {
+    const dk = dedupeKey(a);
+    if (seen.has(a.id) || seen.has(dk)) return false;
+    seen.add(a.id);
+    seen.add(dk);
+    return true;
+  });
+
+  // Includes geometry-presence and (for still-missing alerts) the affected
+  // zone list, not just the id — otherwise an alert whose geometry or
+  // affectedZones arrives/changes on a later upstream refetch wouldn't
+  // change this key at all, and fillMissingGeometry's cached result would
+  // stay stuck on the earlier (missing) geometry for the rest of the
+  // session despite staleTime: Infinity being otherwise correct for a
+  // truly unchanged set of inputs.
+  const withGeometryKey = deduped
+    .map((a) => `${a.id}:${a.geometry ? "g" : (a.affectedZones ?? []).join("+")}`)
+    .join(",");
+  const { data: filled } = useQuery({
+    queryKey: ["alert-polygons-filled", withGeometryKey],
+    queryFn: () => fillMissingGeometry(deduped),
+    enabled: deduped.length > 0,
+    // The inputs (deduped) are already the resolved query data above, so
+    // there's nothing to periodically refetch here — a new key (different
+    // alerts, or an existing alert's geometry/zones changing) is what
+    // triggers a re-run.
+    staleTime: Infinity,
+  });
+
+  const alerts = (filled ?? deduped)
+    .filter((a) => a.geometry)
+    .filter((a) => overrides?.[a.cssClass]?.visible !== false);
   const featureKey = alerts.map((a) => a.id).join(",");
 
   if (!alerts.length) return null;
@@ -166,7 +220,8 @@ function AlertPolygonsLayer({ host }: { host: string }) {
       (a): Feature => ({
         type: "Feature",
         // GeoJSON typing wants a real geometry union; alert geometries are
-        // sourced from LibreWXR's own GeoJSON responses so this cast is safe.
+        // sourced from each source's own GeoJSON responses (or synthesized
+        // from NWS zone boundaries) so this cast is safe.
         geometry: a.geometry as Feature["geometry"],
         properties: { id: a.id, event: a.displayEvent, description: a.description, cssClass: a.cssClass, url: a.url },
       }),
@@ -178,7 +233,7 @@ function AlertPolygonsLayer({ host }: { host: string }) {
       key={featureKey}
       data={featureCollection}
       style={(feature) => {
-        const color = resolveAlertColor(feature?.properties?.cssClass ?? "alert-unknown");
+        const color = resolveAlertColorWithOverrides(feature?.properties?.cssClass ?? "alert-unknown", overrides);
         return { color, weight: 1.5, fillColor: color, fillOpacity: 0.18 };
       }}
       onEachFeature={(feature, layer) => {

@@ -29,4 +29,7 @@ export interface NormalizedAlert {
   issuingOffice?: string;
   url?: string;
   geometry?: AlertGeometry | null;
+  /** Zone-boundary API URLs — see nws.ts. Used to synthesize a polygon for
+   * zone-based products whose `geometry` comes back null. */
+  affectedZones?: string[];
 }
