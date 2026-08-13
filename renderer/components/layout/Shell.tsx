@@ -16,6 +16,7 @@ import { useAlerts } from "@/hooks/useAlerts";
 import { useSpcOutlook } from "@/hooks/useSpcOutlook";
 import { useRadarSettings } from "@/hooks/useRadarSettings";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
+import { useAppliedTheme } from "@/hooks/useAppliedTheme";
 import { useConditionAccent } from "@/hooks/useConditionAccent";
 import { useSeverePulse } from "@/hooks/useSeverePulse";
 import { useFavicon } from "@/hooks/useFavicon";
@@ -102,7 +103,13 @@ export function Shell() {
   const [forcedPulse, setForcedPulse] = useState<string | null>(null);
 
   const resolvedTheme = useResolvedTheme();
-  useConditionAccent(weatherQuery.data?.current.weatherCode, weatherQuery.data?.current.isDay, resolvedTheme);
+  useAppliedTheme();
+  useConditionAccent(
+    weatherQuery.data?.current.weatherCode,
+    weatherQuery.data?.current.isDay,
+    resolvedTheme,
+    (config?.themeId ?? "default") === "default",
+  );
   useFavicon(weatherQuery.data?.current.weatherCode, weatherQuery.data?.current.isDay, resolvedTheme);
   useTaskbarBadge(weatherQuery.data?.current.weatherCode, weatherQuery.data?.current.isDay);
 

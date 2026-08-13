@@ -19,3 +19,13 @@ export function resolveAlertColor(cssClass: string): string {
   cache.set(cssClass, color);
   return color;
 }
+
+/** Same as resolveAlertColor, but checks a user's per-type color override
+ * (Settings → Alerts) first — see types/settings.ts's `alertTypeOverrides`. */
+export function resolveAlertColorWithOverrides(
+  cssClass: string,
+  overrides: Record<string, { visible?: boolean; color?: string }> | undefined,
+): string {
+  const override = overrides?.[cssClass]?.color;
+  return override || resolveAlertColor(cssClass);
+}

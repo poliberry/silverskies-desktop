@@ -5,6 +5,7 @@ import { RightSidebar } from "@/components/layout/RightSidebar";
 import { useWeather } from "@/hooks/useWeather";
 import { useSettings } from "@/hooks/useSettings";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
+import { useAppliedTheme } from "@/hooks/useAppliedTheme";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { WindowControlButtons } from "@/components/layout/WindowControlButtons";
 import { ipc } from "@/lib/ipc-client";
@@ -30,6 +31,7 @@ export function ConditionsWindow({ initialLocation }: ConditionsWindowProps) {
   const [location, setLocation] = useState<WindowLocation | null>(initialLocation);
   const { config } = useSettings();
   const theme = useResolvedTheme();
+  useAppliedTheme();
   const weatherQuery = useWeather(location);
 
   useEffect(() => ipc.windows.onInstanceLocation(setLocation), []);

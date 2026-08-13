@@ -22,6 +22,9 @@ const DEFAULT_CONFIG: ConfigFile = {
   notificationsEnabled: true,
   spcOutlookEnabled: true,
   uiMode: "classic",
+  alertTypeOverrides: {},
+  themeId: "default",
+  customTheme: null,
 };
 
 let warned = false;

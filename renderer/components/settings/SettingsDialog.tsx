@@ -15,6 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSettings } from "@/hooks/useSettings";
 import { AboutPanel } from "./AboutPanel";
 import { DevToolsPanel } from "./DevToolsPanel";
+import { AlertTypesPanel } from "./AlertTypesPanel";
+import { ThemesPanel } from "./ThemesPanel";
 import type { NormalizedAlert } from "@/types/alerts";
 import type { ThemePref, TimeFormatPref, UiModePref, UnitPref, WeatherProviderId } from "@/types/settings";
 
@@ -80,6 +82,12 @@ export function SettingsDialog({
             </TabsTrigger>
             <TabsTrigger value="sources" className={TAB_TRIGGER_CLASS}>
               Data Sources
+            </TabsTrigger>
+            <TabsTrigger value="alerts" className={TAB_TRIGGER_CLASS}>
+              Alerts
+            </TabsTrigger>
+            <TabsTrigger value="themes" className={TAB_TRIGGER_CLASS}>
+              Themes
             </TabsTrigger>
             <TabsTrigger value="developer" className={TAB_TRIGGER_CLASS}>
               Developer
@@ -295,6 +303,14 @@ export function SettingsDialog({
                 this is the only toggle for the radar outline.
               </p>
             </div>
+          </TabsContent>
+
+          <TabsContent value="alerts" className="pt-4">
+            <AlertTypesPanel />
+          </TabsContent>
+
+          <TabsContent value="themes" className="pt-4">
+            <ThemesPanel />
           </TabsContent>
 
           <TabsContent value="developer" className="pt-4">

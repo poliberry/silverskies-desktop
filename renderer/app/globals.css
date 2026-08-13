@@ -450,6 +450,7 @@ body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
 .alert-excessive-heat-watch { --ac: #ff6600; }
 .alert-hard-freeze-warn { --ac: #aaccff; }
 .alert-hard-freeze-watch { --ac: #88aadd; }
+.alert-freeze-warn { --ac: #4477aa; }
 .alert-freeze-watch { --ac: #6688bb; }
 .alert-storm-surge-warn { --ac: #ff44aa; }
 .alert-storm-surge-watch { --ac: #cc3388; }

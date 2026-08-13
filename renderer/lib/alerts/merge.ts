@@ -15,7 +15,10 @@ const SEVERITY_RANK: Record<string, number> = {
   Unknown: 4,
 };
 
-function dedupeKey(a: NormalizedAlert): string {
+/** Cross-source de-dupe key — exported so callers merging additional alert
+ * feeds outside fetchMergedAlerts (e.g. the radar map's polygon layer) can
+ * dedupe against these results the same way. */
+export function dedupeKey(a: NormalizedAlert): string {
   return `${a.event}|${a.areaDesc ?? ""}|${a.onset ?? ""}`.toLowerCase();
 }
 
