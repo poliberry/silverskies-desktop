@@ -85,9 +85,39 @@ jobs:
             exit 0
           fi
 
+          # `gh release delete-asset` occasionally hits a transient GitHub
+          # API 5xx (seen as a bare "HTTP 502: Server Error") with no retry
+          # of its own, which used to fail the whole job on a blip that
+          # would've succeeded a few seconds later. Retries with backoff;
+          # a 404 (asset already gone — e.g. a previous attempt's retry
+          # already deleted it) is treated as success rather than an error
+          # to retry, since the goal state ("this asset isn't there") is
+          # already met.
+          delete_asset_with_retry() {
+            local name="$1" attempt=1 max_attempts=5 delay=3 err
+            while true; do
+              if err=$(gh release delete-asset "$TAG" "$name" --yes 2>&1); then
+                return 0
+              fi
+              if echo "$err" | grep -qi "not found"; then
+                echo "Asset '$name' was already gone — nothing to do."
+                return 0
+              fi
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "::error::Failed to delete stale asset '$name' after $max_attempts attempts:"
+                echo "$err"
+                return 1
+              fi
+              echo "Delete of '$name' failed (attempt $attempt/$max_attempts) — retrying in ${delay}s: $err"
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+            done
+          }
+
           echo "$STALE" | while IFS= read -r name; do
             echo "Deleting stale asset from a previous attempt: $name"
-            gh release delete-asset "$TAG" "$name" --yes
+            delete_asset_with_retry "$name"
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
