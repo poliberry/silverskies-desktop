@@ -489,7 +489,13 @@ export function LeafletRadarMap({
           {selectedStation && (
             <>
               <FlyToStation lat={selectedStation.lat} lon={selectedStation.lon} />
-              <StationRangeOverlay lat={selectedStation.lat} lon={selectedStation.lon} />
+              {/* Keyed on the station id to force a full remount when
+                  switching — react-leaflet updates an existing SVGOverlay's
+                  `bounds` prop via Leaflet's generic ImageOverlay update
+                  path rather than a dedicated reposition call, which isn't
+                  reliably repainting the ring/sweep at the new station's
+                  location without a fresh layer instance. */}
+              <StationRangeOverlay key={selectedStation.id} lat={selectedStation.lat} lon={selectedStation.lon} />
             </>
           )}
         </MapContainer>
