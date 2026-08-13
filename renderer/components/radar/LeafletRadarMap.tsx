@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, GeoJSON, useMap, useMapEvents } from "react-leaflet";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MapContainer, TileLayer, WMSTileLayer, Marker, GeoJSON, SVGOverlay, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
+import type { LatLngBoundsExpression } from "leaflet";
 import type { Feature, FeatureCollection } from "geojson";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -18,6 +19,9 @@ import { preloadRadarFrame } from "@/lib/radar-preload";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useSpcOutlook } from "@/hooks/useSpcOutlook";
 import { useSettings } from "@/hooks/useSettings";
+import { useRadarStations } from "@/hooks/useRadarStations";
+import { openMeteoProvider } from "@/lib/providers/open-meteo";
+import { RADAR_PRODUCTS, stationLayerName, stationWmsUrl } from "@/lib/radar-station-products";
 import type { RadarMapProps } from "./RadarMap";
 import { RadarControls } from "./RadarControls";
 import { RadarPlaybackBar } from "./RadarPlaybackBar";
@@ -25,6 +29,9 @@ import { RadarLegend } from "./RadarLegend";
 import { RadarTileCrossfade } from "./RadarTileCrossfade";
 import { WeatherTileOverlay } from "./overlays/WeatherTileOverlay";
 import { AqiBadge } from "./overlays/AqiBadge";
+import { RadarStationsLayer } from "./RadarStationsLayer";
+import { StationInfoPanel } from "./StationInfoPanel";
+import { CARTO_DARK, CARTO_LIGHT, CARTO_ATTRIB } from "@/lib/basemap-tiles";
 
 // Fixed zoom level used for background tile preloading (saved locations,
 // the ring around the active one) — independent of whatever zoom the user
@@ -32,18 +39,29 @@ import { AqiBadge } from "./overlays/AqiBadge";
 // before they switch there.
 const PRELOAD_ZOOM = 7;
 
-const CARTO_DARK = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
-// Was pointed at bare "voyager/{z}/{x}/{y}" — that path 404s (voyager tiles
-// are only served under "/rastertiles/voyager/…"), so the *entire* light-mode
-// basemap silently failed to load, leaving the radar layer floating over a
-// blank container with nothing to give it visual context. "light_all" is
-// CARTO's muted Positron style, served at the same bare path as dark_all,
-// and (being flat/low-contrast like dark_all) is also a better basemap to
-// put a semi-transparent radar overlay on top of than the busy, colorful
-// voyager style would have been.
-const CARTO_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
-const CARTO_ATTRIB =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+// Roughly matches typical NEXRAD volume-scan cadence, so a selected
+// station's image doesn't visibly go stale while it's left open.
+const STATION_IMAGE_REFRESH_MS = 2 * 60_000;
+
+// The classic WSR-88D "short range" coverage (124 nautical miles) — this is
+// the actual real-world diameter both the sweep and the boundary ring below
+// are sized to; the WMS image itself only ever paints real data, so nothing
+// outside the radar's actual range shows regardless of this ring.
+const STATION_RANGE_METERS = 229_664;
+// Meters-per-degree of latitude is ~constant; longitude isn't (it shrinks
+// toward the poles), so the box has to be corrected by cos(latitude) to
+// stay square in real-world meters — otherwise the circle drawn inside it
+// would come out visibly egg-shaped away from the equator.
+const METERS_PER_DEGREE_LAT = 111_320;
+
+function stationRangeBounds(lat: number, lon: number, radiusMeters: number): LatLngBoundsExpression {
+  const dLat = radiusMeters / METERS_PER_DEGREE_LAT;
+  const dLon = radiusMeters / (METERS_PER_DEGREE_LAT * Math.cos((lat * Math.PI) / 180));
+  return [
+    [lat - dLat, lon - dLon],
+    [lat + dLat, lon + dLon],
+  ];
+}
 
 function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -65,6 +83,48 @@ function RecenterOnLocationChange({ lat, lon }: { lat: number; lon: number }) {
     map.flyTo([lat, lon], Math.max(map.getZoom(), 7), { duration: 0.8 });
   }, [lat, lon, map]);
   return null;
+}
+
+/** Flies to a newly-selected station once (not on every re-render while it
+ * stays selected, e.g. a metadata refetch) so the station is actually in
+ * view without the user having to pan there manually. */
+function FlyToStation({ lat, lon }: { lat: number; lon: number }) {
+  const map = useMap();
+  const lastRef = useRef<string>("");
+  useEffect(() => {
+    const key = `${lat},${lon}`;
+    if (lastRef.current === key) return;
+    lastRef.current = key;
+    map.flyTo([lat, lon], 7, { duration: 0.8 });
+  }, [lat, lon, map]);
+  return null;
+}
+
+/**
+ * A white boundary ring at the radar's real range plus a decorative sweep
+ * filling that same circle — both drawn as one SVGOverlay bound to real
+ * lat/lon (not fixed pixels), so panning/zooming moves and rescales them
+ * exactly like any other geographic feature, always at the radar's true
+ * physical size regardless of zoom level. The sweep's own rotation is still
+ * purely decorative (no free feed exposes the antenna's actual azimuth) —
+ * reuses the existing `.radar-sweep` conic-gradient/animation via a
+ * `foreignObject` so it doesn't need reimplementing as raw SVG path math.
+ */
+function StationRangeOverlay({ lat, lon }: { lat: number; lon: number }) {
+  const bounds = useMemo(() => stationRangeBounds(lat, lon, STATION_RANGE_METERS), [lat, lon]);
+  return (
+    <SVGOverlay bounds={bounds} attributes={{ viewBox: "0 0 100 100" }} interactive={false}>
+      <circle cx={50} cy={50} r={49} fill="none" stroke="#ffffff" strokeWidth={0.5} opacity={0.85} />
+      <foreignObject x={1} y={1} width={98} height={98}>
+        {/* No xmlns attribute needed here — this div is created through
+            React's own createElement (already HTML-namespaced) and
+            portaled in via SVGOverlay, not parsed from a raw HTML/SVG
+            string, which is the only case that attribute actually matters
+            for. */}
+        <div className="radar-sweep" />
+      </foreignObject>
+    </SVGOverlay>
+  );
 }
 
 function AlertPolygonsLayer({ host }: { host: string }) {
@@ -239,6 +299,12 @@ export function LeafletRadarMap({
   // starts collapsed so the map gets as much of the window as possible;
   // see the "Playback" toggle strip in the render below.
   const [showPlaybackBar, setShowPlaybackBar] = useState(false);
+  const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
+  const [stationProductId, setStationProductId] = useState(RADAR_PRODUCTS[0].id);
+  // Bumped on a timer to force the station WMSTileLayer to remount and pull
+  // a fresh image — GeoServer always serves whatever its latest mosaic is
+  // regardless of query params, so a plain re-render wouldn't otherwise ask.
+  const [stationRefreshTick, setStationRefreshTick] = useState(0);
   const { colorScheme, showArrows, showCells, showPolygons } = settings;
 
   // Config (and therefore the OpenWeatherMap key) is app-wide IPC-backed
@@ -249,6 +315,40 @@ export function LeafletRadarMap({
   const { config } = useSettings();
   const owmApiKey = config?.openWeatherMapApiKey ?? null;
   const overlaysAvailable = Boolean(owmApiKey);
+  const unit = config?.units ?? "F";
+
+  // Shares the ["radar-stations"] query cache with RadarStationsLayer below
+  // — selecting a marker that layer already fetched doesn't trigger a
+  // second network call.
+  const { data: radarStations } = useRadarStations(Boolean(selectedStationId));
+  const selectedStation = useMemo(
+    () => radarStations?.find((s) => s.id === selectedStationId) ?? null,
+    [radarStations, selectedStationId],
+  );
+  const stationProduct = RADAR_PRODUCTS.find((p) => p.id === stationProductId) ?? RADAR_PRODUCTS[0];
+
+  const handleSelectStation = useCallback((id: string) => {
+    setSelectedStationId((current) => (current === id ? null : id));
+  }, []);
+
+  // A station clicked at one location shouldn't silently keep showing once
+  // the user has moved on to somewhere else entirely.
+  useEffect(() => {
+    setSelectedStationId(null);
+  }, [lat, lon]);
+
+  useEffect(() => {
+    if (!selectedStationId) return;
+    const id = setInterval(() => setStationRefreshTick((t) => t + 1), STATION_IMAGE_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [selectedStationId]);
+
+  const stationWindQuery = useQuery({
+    queryKey: ["station-wind", selectedStation?.id],
+    queryFn: () => openMeteoProvider.fetchWeather({ lat: selectedStation!.lat, lon: selectedStation!.lon }),
+    enabled: Boolean(selectedStation),
+    refetchInterval: 5 * 60_000,
+  });
 
   const { data: weatherMaps } = useQuery({
     queryKey: ["librewxr-weather-maps", libreWxrHost],
@@ -288,12 +388,15 @@ export function LeafletRadarMap({
   }, [latestFrameTime, latestObservedIndex]);
 
   useEffect(() => {
-    if (!isPlaying || frames.length < 2) return;
+    // A station's own WMS image doesn't respond to the composite frame
+    // index at all — no point ticking it forward in the background (or
+    // burning CPU/triggering re-renders) while it's not visible.
+    if (!isPlaying || frames.length < 2 || selectedStation) return;
     const id = setInterval(() => {
       setSelectedIndex((i) => (i + 1) % frames.length);
     }, 800);
     return () => clearInterval(id);
-  }, [isPlaying, frames.length]);
+  }, [isPlaying, frames.length, selectedStation]);
 
   const currentFrame = frames[selectedIndex];
   const tileOpts = useMemo(
@@ -358,7 +461,24 @@ export function LeafletRadarMap({
           attributionControl
         >
           <TileLayer url={theme === "light" ? CARTO_LIGHT : CARTO_DARK} attribution={CARTO_ATTRIB} />
-          <RadarTileCrossfade url={debouncedRadarUrl} targetOpacity={0.75} zIndex={5} />
+          {/* Selecting a station swaps the general composite radar for that
+              station's own real single-site WMS product, directly on this
+              same map (docked or pop-out — both render through here) rather
+              than in a separate dialog. */}
+          {selectedStation ? (
+            <WMSTileLayer
+              key={`${selectedStation.id}-${stationProduct.id}-${stationRefreshTick}`}
+              url={stationWmsUrl(selectedStation.id)}
+              layers={stationLayerName(selectedStation.id, stationProduct)}
+              styles={stationProduct.styleName}
+              format="image/png"
+              transparent
+              version="1.1.1"
+              opacity={0.85}
+            />
+          ) : (
+            <RadarTileCrossfade url={debouncedRadarUrl} targetOpacity={0.75} zIndex={5} />
+          )}
           {settings.showWindOverlay && owmApiKey && <WeatherTileOverlay layer="wind_new" apiKey={owmApiKey} zIndex={6} />}
           {settings.showTempOverlay && owmApiKey && <WeatherTileOverlay layer="temp_new" apiKey={owmApiKey} zIndex={7} />}
           {settings.showPrecipOverlay && owmApiKey && (
@@ -366,8 +486,21 @@ export function LeafletRadarMap({
           )}
           {showPolygons && <AlertPolygonsLayer host={libreWxrHost} />}
           <SpcOutlookLayer enabled={spcOutlookEnabled} />
+          {settings.showRadarStations && <RadarStationsLayer onSelect={handleSelectStation} />}
           <Marker position={[lat, lon]} icon={locationIcon} />
           <RecenterOnLocationChange lat={lat} lon={lon} />
+          {selectedStation && (
+            <>
+              <FlyToStation lat={selectedStation.lat} lon={selectedStation.lon} />
+              {/* Keyed on the station id to force a full remount when
+                  switching — react-leaflet updates an existing SVGOverlay's
+                  `bounds` prop via Leaflet's generic ImageOverlay update
+                  path rather than a dedicated reposition call, which isn't
+                  reliably repainting the ring/sweep at the new station's
+                  location without a fresh layer instance. */}
+              <StationRangeOverlay key={selectedStation.id} lat={selectedStation.lat} lon={selectedStation.lon} />
+            </>
+          )}
         </MapContainer>
 
         {/* Explicit z-index needed here: this overlay and the map are both
@@ -381,7 +514,7 @@ export function LeafletRadarMap({
             {label}
           </div>
           <div className="pointer-events-auto flex flex-col items-end gap-2">
-            {isLive && (
+            {!selectedStation && isLive && (
               <div
                 className="glass-card flex items-center gap-1.5 px-2.5 py-1.5 font-mono text-[0.65rem] tracking-wider"
                 style={{ color: "var(--danger)" }}
@@ -395,9 +528,25 @@ export function LeafletRadarMap({
               </div>
             )}
             {settings.showAqiOverlay && owmApiKey && <AqiBadge lat={lat} lon={lon} apiKey={owmApiKey} />}
-            <RadarLegend colorScheme={colorScheme} colorSchemes={weatherMaps?.radar.colorSchemes ?? []} />
+            {!selectedStation && <RadarLegend colorScheme={colorScheme} colorSchemes={weatherMaps?.radar.colorSchemes ?? []} />}
           </div>
         </div>
+
+        {selectedStation && (
+          <div className="pointer-events-none absolute inset-3 z-[1000] flex items-end">
+            <div className="pointer-events-auto">
+              <StationInfoPanel
+                station={selectedStation}
+                productId={stationProductId}
+                onProductChange={setStationProductId}
+                onClose={() => setSelectedStationId(null)}
+                wind={stationWindQuery.data}
+                windLoading={stationWindQuery.isLoading}
+                unit={unit}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {frames.length > 0 &&
@@ -414,6 +563,7 @@ export function LeafletRadarMap({
             colorSchemes={weatherMaps?.radar.colorSchemes ?? []}
             settings={settings}
             overlaysAvailable={overlaysAvailable}
+            disabled={Boolean(selectedStation)}
           />
         ) : (
           // Pop-out windows: playback collapses to a slim toggle strip by
@@ -430,7 +580,7 @@ export function LeafletRadarMap({
               <span className="flex items-center gap-1.5 font-mono" style={{ fontSize: "0.7rem", color: "var(--text3)" }}>
                 <i className="ph ph-clock-counter-clockwise" aria-hidden="true" />
                 Playback
-                {isLive && (
+                {!selectedStation && isLive && (
                   <span style={{ color: "var(--danger)" }} className="tracking-wider">
                     · LIVE
                   </span>
@@ -449,6 +599,7 @@ export function LeafletRadarMap({
                   onTogglePlay={() => setIsPlaying((v) => !v)}
                   isLive={isLive}
                   onJumpToLive={() => setSelectedIndex(latestObservedIndex)}
+                  disabled={Boolean(selectedStation)}
                 />
               </div>
             )}

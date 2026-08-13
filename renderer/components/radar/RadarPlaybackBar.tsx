@@ -11,6 +11,12 @@ export interface RadarPlaybackBarProps {
   onTogglePlay: () => void;
   isLive: boolean;
   onJumpToLive: () => void;
+  /** True while a station's own single-site radar image is showing instead
+   * of the composite radar — playback only ever drives the composite frame
+   * timeline, so Play/scrub/Live here wouldn't change what's actually on
+   * screen. Dims the bar and blocks interaction rather than hiding it
+   * outright, so it's clear playback still exists, just not for this view. */
+  disabled?: boolean;
 }
 
 function frameLabel(frame: LibreWxrFrame | undefined, isForecast: boolean): string {
@@ -36,13 +42,19 @@ export function RadarPlaybackBar({
   onTogglePlay,
   isLive,
   onJumpToLive,
+  disabled = false,
 }: RadarPlaybackBarProps) {
   const current = frames[selectedIndex];
   const isForecast = selectedIndex >= nowcastStartIndex;
+  const disabledTitle = "Showing a station's own radar — playback is for the composite radar timeline.";
 
   return (
-    <div className="flex items-center gap-3">
-      <button className="refresh-btn" onClick={onTogglePlay} aria-label={isPlaying ? "Pause" : "Play"}>
+    <div
+      className="flex items-center gap-3"
+      style={disabled ? { opacity: 0.45 } : undefined}
+      title={disabled ? disabledTitle : undefined}
+    >
+      <button className="refresh-btn" onClick={onTogglePlay} disabled={disabled} aria-label={isPlaying ? "Pause" : "Play"}>
         <span className="ri">{isPlaying ? "⏸" : "▶"}</span>
       </button>
       <input
@@ -52,6 +64,7 @@ export function RadarPlaybackBar({
         max={Math.max(frames.length - 1, 0)}
         value={selectedIndex}
         onChange={(e) => onSelectIndex(Number(e.target.value))}
+        disabled={disabled}
       />
       <div className="font-mono text-xs whitespace-nowrap" style={{ color: isForecast ? "var(--accent2)" : "var(--text2)" }}>
         {frameLabel(current, isForecast)}
@@ -60,7 +73,8 @@ export function RadarPlaybackBar({
       <button
         className={`unit-btn ${isLive ? "active" : ""}`}
         onClick={onJumpToLive}
-        title="Jump to the latest radar frame and keep following new ones as they arrive"
+        disabled={disabled}
+        title={disabled ? disabledTitle : "Jump to the latest radar frame and keep following new ones as they arrive"}
       >
         Live
       </button>

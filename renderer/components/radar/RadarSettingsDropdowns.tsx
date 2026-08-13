@@ -80,6 +80,9 @@ export function RadarSettingsDropdowns({ colorSchemes, settings, overlaysAvailab
             <DropdownMenuCheckboxItem checked={settings.showPolygons} onCheckedChange={settings.togglePolygons}>
               Polygons
             </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={settings.showRadarStations} onCheckedChange={settings.toggleRadarStations}>
+              Radar Stations
+            </DropdownMenuCheckboxItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>

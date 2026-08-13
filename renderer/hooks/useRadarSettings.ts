@@ -31,6 +31,11 @@ export interface RadarSettings {
   togglePrecipOverlay: () => void;
   showAqiOverlay: boolean;
   toggleAqiOverlay: () => void;
+  /** WSR-88D station markers with individual clickable radar viewers —
+   * default off, since 159 markers on top of everything else is a lot of
+   * visual noise for anyone who just wants the base radar. */
+  showRadarStations: boolean;
+  toggleRadarStations: () => void;
 }
 
 export function useRadarSettings(): RadarSettings {
@@ -42,6 +47,7 @@ export function useRadarSettings(): RadarSettings {
   const [showTempOverlay, setShowTempOverlay] = useState(false);
   const [showPrecipOverlay, setShowPrecipOverlay] = useState(false);
   const [showAqiOverlay, setShowAqiOverlay] = useState(false);
+  const [showRadarStations, setShowRadarStations] = useState(false);
 
   return {
     colorScheme,
@@ -60,5 +66,7 @@ export function useRadarSettings(): RadarSettings {
     togglePrecipOverlay: () => setShowPrecipOverlay((v) => !v),
     showAqiOverlay,
     toggleAqiOverlay: () => setShowAqiOverlay((v) => !v),
+    showRadarStations,
+    toggleRadarStations: () => setShowRadarStations((v) => !v),
   };
 }

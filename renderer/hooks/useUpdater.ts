@@ -33,9 +33,13 @@ export function useUpdater() {
     void ipc.updater.check();
   }, []);
 
+  const download = useCallback(() => {
+    void ipc.updater.download();
+  }, []);
+
   const install = useCallback(() => {
     void ipc.updater.install();
   }, []);
 
-  return { status, check, install };
+  return { status, check, download, install };
 }

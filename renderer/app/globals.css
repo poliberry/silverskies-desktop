@@ -668,3 +668,71 @@ body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
 .leaflet-bar a, .leaflet-bar a:hover {
   background: var(--surface); color: var(--text2); border-bottom: 1px solid var(--border) !important;
 }
+
+/* ── Radar stations (WSR-88D markers + station radar dialog) ────────── */
+.radar-station-marker {
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.03em;
+  padding: 2px 6px; border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  border: 1.5px solid var(--accent2); color: var(--text);
+  white-space: nowrap; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); cursor: pointer;
+}
+.radar-station-marker.alarm { border-color: var(--danger); color: var(--danger); }
+
+/* Decorative sweep drawn over the radar map once a station is selected —
+   lives inside an SVGOverlay bound to the station's real range in lat/lon
+   (LeafletRadarMap.tsx's StationRangeOverlay, via a <foreignObject> so this
+   plain CSS/HTML approach doesn't need reimplementing as raw SVG path
+   math), not a screen-fixed div — panning/zooming moves and rescales it
+   exactly like any other geographic feature, always at the radar's true
+   physical diameter regardless of zoom. Not geo-synced to any real antenna
+   azimuth though (no free feed exposes that) — the rotation itself is
+   still purely decorative, per the "simulate radar scanning" ask. Fills
+   whatever box the foreignObject gives it rather than a fixed pixel size. */
+.radar-sweep {
+  width: 100%; height: 100%;
+  border-radius: 50%; pointer-events: none;
+  background: conic-gradient(from 0deg, transparent 0deg, color-mix(in srgb, #ffdd00 65%, transparent) 7deg, transparent 40deg);
+  animation: radar-sweep-spin 4s linear infinite;
+  mix-blend-mode: screen;
+}
+@keyframes radar-sweep-spin {
+  to { transform: rotate(360deg); }
+}
+
+.radar-product-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.02em; text-align: center;
+  padding: 6px 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text2); cursor: pointer; transition: all 0.15s;
+}
+.radar-product-btn:hover { border-color: var(--border-active); color: var(--text); }
+.radar-product-btn.active { border-color: var(--border-active); background: var(--accent-glow); color: var(--accent2); }
+.radar-product-legend { width: 100%; height: 10px; object-fit: cover; border-radius: 2px; }
+
+.wind-compass {
+  position: relative; width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--border); flex-shrink: 0;
+}
+.wind-compass-needle {
+  position: absolute; left: 50%; top: 50%; width: 2px; height: 9px;
+  margin-left: -1px; margin-top: -9px; transform-origin: 50% 9px;
+  background: var(--accent2);
+  transition: transform 0.6s ease, opacity 0.3s ease;
+  animation: wind-compass-pulse 2.2s ease-in-out infinite;
+}
+/* The pulse animation above continuously writes `opacity` every frame,
+   which otherwise wins over the loading state's inline `opacity: 0.3` (an
+   animated property always overrides an element's own inline value for
+   that property) — stale/unavailable wind direction would still read as
+   "live" at 0.7-1 opacity. Drop the animation entirely while loading so
+   the dimmed opacity actually sticks. */
+.wind-compass-needle.is-loading {
+  animation: none;
+  opacity: 0.3;
+}
+@keyframes wind-compass-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}

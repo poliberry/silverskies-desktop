@@ -13,7 +13,7 @@ function statusLabel(status: ReturnType<typeof useUpdater>["status"]): string {
     case "checking":
       return "Checking for updates…";
     case "available":
-      return `Update v${status.version} found — downloading…`;
+      return `Update v${status.version} available.`;
     case "not-available":
       return "You're up to date.";
     case "downloading":
@@ -29,7 +29,7 @@ function statusLabel(status: ReturnType<typeof useUpdater>["status"]): string {
 
 export function AboutPanel() {
   const [info, setInfo] = useState<AppInfo | null>(null);
-  const { status, check, install } = useUpdater();
+  const { status, check, download, install } = useUpdater();
 
   useEffect(() => {
     void ipc.app.getInfo().then(setInfo);
@@ -62,9 +62,17 @@ export function AboutPanel() {
       <div className="settings-bar-section">
         <div className="settings-bar-label">UPDATES</div>
         <div className="flex items-center gap-2">
+          {/* Every step here — checking, downloading, installing — only ever
+              happens on click. electron-updater's autoDownload/
+              autoInstallOnAppQuit are both off (electron/main.ts), so an
+              update sits at "available" or "downloaded" until the user
+              chooses to act on it. */}
           <Button variant="outline" onClick={check} disabled={busy}>
             Check for Updates
           </Button>
+          {status.state === "available" && (
+            <Button onClick={download}>Download Update</Button>
+          )}
           {status.state === "downloaded" && (
             <Button onClick={install}>Restart &amp; Install</Button>
           )}

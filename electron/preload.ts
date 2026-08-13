@@ -38,6 +38,7 @@ const api = {
   },
   updater: {
     check: (): Promise<void> => ipcRenderer.invoke("updater:check"),
+    download: (): Promise<void> => ipcRenderer.invoke("updater:download"),
     install: (): Promise<void> => ipcRenderer.invoke("updater:install"),
     getStatus: (): Promise<UpdaterStatus> => ipcRenderer.invoke("updater:getStatus"),
     onStatus: (callback: (status: UpdaterStatus) => void): (() => void) => {

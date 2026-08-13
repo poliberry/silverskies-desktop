@@ -539,6 +539,13 @@ function sendUpdaterStatus(status: UpdaterStatus) {
  * call at startup below — that one only ever surfaces a native OS
  * notification, nothing the UI itself can react to. */
 function registerUpdaterHandlers() {
+  // The user chooses when to download and when to install/restart — never
+  // automatic. autoInstallOnAppQuit defaults to true (installs a pending
+  // download the moment the app quits, with no further confirmation), which
+  // is exactly the kind of behind-your-back install this is meant to avoid.
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+
   ipcMain.handle("updater:getStatus", () => lastUpdaterStatus);
 
   autoUpdater.on("checking-for-update", () => sendUpdaterStatus({ state: "checking" }));
@@ -560,6 +567,10 @@ function registerUpdaterHandlers() {
       return;
     }
     autoUpdater.checkForUpdates().catch((err) => sendUpdaterStatus({ state: "error", message: String(err) }));
+  });
+
+  ipcMain.handle("updater:download", () => {
+    autoUpdater.downloadUpdate().catch((err) => sendUpdaterStatus({ state: "error", message: String(err) }));
   });
 
   ipcMain.handle("updater:install", () => autoUpdater.quitAndInstall());
@@ -608,10 +619,14 @@ app.whenReady().then(async () => {
     }
   }
 
-  // No-op until `publish.owner` in package.json is pointed at a real repo
-  // with published releases; failures here must never block the app.
+  // Silently checks (never downloads/installs on its own — see
+  // registerUpdaterHandlers) so the About tab already has a fresh status the
+  // first time it's opened, instead of showing "idle" until the user clicks
+  // Check for Updates themselves. No-op until `publish.owner` in
+  // package.json is pointed at a real repo with published releases;
+  // failures here must never block the app.
   if (app.isPackaged) {
-    autoUpdater.checkForUpdatesAndNotify().catch(() => {
+    autoUpdater.checkForUpdates().catch(() => {
       /* not fatal — no update feed configured yet, or offline */
     });
   }
