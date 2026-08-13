@@ -680,19 +680,25 @@ body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
 }
 .radar-station-marker.alarm { border-color: var(--danger); color: var(--danger); }
 
-/* Decorative sweep drawn over the station dialog's mini-map — fixed
-   screen-space circle, not geo-synced to any real antenna azimuth (no free
-   feed exposes that), per the "simulate radar scanning" ask. */
+/* Decorative sweep drawn over the radar map once a station is selected —
+   lives inside an SVGOverlay bound to the station's real range in lat/lon
+   (LeafletRadarMap.tsx's StationRangeOverlay, via a <foreignObject> so this
+   plain CSS/HTML approach doesn't need reimplementing as raw SVG path
+   math), not a screen-fixed div — panning/zooming moves and rescales it
+   exactly like any other geographic feature, always at the radar's true
+   physical diameter regardless of zoom. Not geo-synced to any real antenna
+   azimuth though (no free feed exposes that) — the rotation itself is
+   still purely decorative, per the "simulate radar scanning" ask. Fills
+   whatever box the foreignObject gives it rather than a fixed pixel size. */
 .radar-sweep {
-  position: absolute; left: 50%; top: 50%; width: 82%; aspect-ratio: 1;
-  transform: translate(-50%, -50%);
+  width: 100%; height: 100%;
   border-radius: 50%; pointer-events: none;
-  background: conic-gradient(from 0deg, transparent 0deg, color-mix(in srgb, var(--accent) 60%, transparent) 16deg, transparent 60deg);
+  background: conic-gradient(from 0deg, transparent 0deg, color-mix(in srgb, #ffdd00 65%, transparent) 7deg, transparent 40deg);
   animation: radar-sweep-spin 4s linear infinite;
   mix-blend-mode: screen;
 }
 @keyframes radar-sweep-spin {
-  to { transform: translate(-50%, -50%) rotate(360deg); }
+  to { transform: rotate(360deg); }
 }
 
 .radar-product-btn {

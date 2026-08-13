@@ -18,10 +18,11 @@ function stationIcon(stationId: string, alarm: boolean): L.DivIcon {
   });
 }
 
-/** All WSR-88D station markers — clicking one opens StationRadarDialog for
- * that site. Memoized on the station list (not the map's own re-renders,
- * e.g. from playback scrubbing) since building ~159 divIcons on every
- * unrelated render would be wasteful. */
+/** All WSR-88D station markers — clicking one swaps the radar map's own
+ * layer to that site's WMS product (see LeafletRadarMap.tsx). Memoized on
+ * the station list (not the map's own re-renders, e.g. from playback
+ * scrubbing) since building ~159 divIcons on every unrelated render would
+ * be wasteful. */
 export function RadarStationsLayer({ onSelect }: RadarStationsLayerProps) {
   const { data } = useRadarStations(true);
 

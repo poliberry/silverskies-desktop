@@ -64,16 +64,18 @@ later self-host LibreWXR (see [librewxr.net](https://librewxr.net)), point Setti
 
 An opt-in map layer (Radar → Layers → "Radar Stations") showing all 159 US NEXRAD (WSR-88D)
 sites, sourced from the official, keyless NWS API (`api.weather.gov/radar/stations`) — that's
-also where the scan time, VCP, and operability status shown in each station's panel come from.
-Clicking a station opens its own radar viewer: five real single-site Level 3 products
-(Reflectivity, Velocity, Hydrometeor Classification, Storm Total Precip, 1-Hr Accumulation) via
-NOAA/NCEP's public GeoServer WMS (`opengeo.ncep.noaa.gov`, confirmed against its own
-GetCapabilities — no key needed, CORS open), plus the station's current wind and a purely
-decorative sweep animation (not geo-synced to a real antenna azimuth — no free feed exposes
-that). US-only by design: this is NOAA's own network, and there's no equivalent free,
-individually-viewable radar-site imagery for the rest of the world the way there is for NEXRAD.
-"FastScan" labels VCPs that include supplemental SAILS/MESO-SAILS low-level scans — the closest
-real, documented NEXRAD concept to that name.
+also where the scan time, VCP, and operability status shown in each station's info panel come
+from. Clicking a station swaps the radar map's own layer — the same map, docked or pop-out, not
+a separate dialog — to that site's real single-site data: five Level 3 products (Reflectivity,
+Velocity, Hydrometeor Classification, Storm Total Precip, 1-Hr Accumulation) via NOAA/NCEP's
+public GeoServer WMS (`opengeo.ncep.noaa.gov`, confirmed against its own GetCapabilities — no key
+needed, CORS open). An info panel floats over the map with the product picker, the station's
+current wind, and a decorative sweep animation pinned to the station's own location (a real
+Leaflet marker, so it pans/zooms with the map — not geo-synced to a real antenna azimuth though,
+no free feed exposes that). US-only by design: this is NOAA's own network, and there's no
+equivalent free, individually-viewable radar-site imagery for the rest of the world the way
+there is for NEXRAD. "FastScan" labels VCPs that include supplemental SAILS/MESO-SAILS low-level
+scans — the closest real, documented NEXRAD concept to that name.
 
 ## Development
 
