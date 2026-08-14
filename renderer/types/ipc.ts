@@ -1,6 +1,6 @@
 import type { ConfigFile, LocationsFile, SavedLocation } from "./settings";
 import type { AppInfo, UpdaterStatus } from "./updater";
-import type { MapViewBounds, WindowLocation } from "./windows";
+import type { BrowserWindowState, MapViewBounds, WindowLocation } from "./windows";
 import type { NormalizedAlert } from "./alerts";
 
 // Mirrors the shape contextBridge.exposeInMainWorld("silverSkies", ...)
@@ -55,6 +55,15 @@ export interface SilverSkiesApi {
     isPrimaryRadarOpen(): Promise<boolean>;
     onPrimaryAuditLogClosed(callback: () => void): () => void;
     isPrimaryAuditLogOpen(): Promise<boolean>;
+    openBrowser(opts: { url: string; title?: string }): Promise<void>;
+  };
+  browser: {
+    navigate(url: string): Promise<void>;
+    goBack(): Promise<void>;
+    goForward(): Promise<void>;
+    reload(): Promise<void>;
+    reportChromeHeight(height: number): void;
+    onState(callback: (state: BrowserWindowState) => void): () => void;
   };
   windowControls: {
     minimize(): Promise<void>;

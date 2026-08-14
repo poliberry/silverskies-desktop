@@ -5,6 +5,7 @@ import type { NormalizedAlert } from "@/types/alerts";
 import { alertIconName } from "@/lib/alerts/classify";
 import { issuedLabel, timeRemainingLabel, untilLabel } from "@/lib/alerts/format";
 import { ipc } from "@/lib/ipc-client";
+import { resolveAlertSourceUrl } from "@/lib/browser/external-links";
 import { FitTitle } from "./FitTitle";
 
 export interface AlertDetailContentProps {
@@ -58,7 +59,15 @@ export function AlertDetailContent({ alert, titleAction }: AlertDetailContentPro
             href={alert.url}
             onClick={(e) => {
               e.preventDefault();
-              void ipc.app.openExternal(alert.url!);
+              // NWS alerts route through IEM's VTEC event browser instead of
+              // the raw CAP identifier; librewxr/WMO-sourced alerts carry
+              // that same identifier as `url` but not a parsed VTEC, so it's
+              // resolved on demand (see resolveAlertSourceUrl) rather than
+              // opening the bare "urn:oid:..." string, which no browser can
+              // actually load.
+              void resolveAlertSourceUrl(alert).then((url) => {
+                if (url) void ipc.windows.openBrowser({ url, title: alert.displayEvent });
+              });
             }}
           >
             SOURCE ↗

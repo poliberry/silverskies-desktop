@@ -32,6 +32,7 @@ import { RadarTileCrossfade } from "./RadarTileCrossfade";
 import { WeatherTileOverlay } from "./overlays/WeatherTileOverlay";
 import { AqiBadge } from "./overlays/AqiBadge";
 import { RadarStationsLayer } from "./RadarStationsLayer";
+import { WindBarbsLayer } from "./WindBarbsLayer";
 import { StationInfoPanel } from "./StationInfoPanel";
 import { CARTO_DARK, CARTO_LIGHT, CARTO_ATTRIB } from "@/lib/basemap-tiles";
 
@@ -764,6 +765,7 @@ export function LeafletRadarMap({
           {showPolygons && <AlertPolygonsLayer host={libreWxrHost} />}
           <SpcOutlookLayer enabled={spcOutlookEnabled} />
           {settings.showRadarStations && <RadarStationsLayer onSelect={handleSelectStation} />}
+          {settings.showWindBarbs && <WindBarbsLayer />}
           <Marker position={[lat, lon]} icon={locationIcon} />
           <RecenterOnLocationChange lat={lat} lon={lon} />
           <InvalidateSizeOnResize />

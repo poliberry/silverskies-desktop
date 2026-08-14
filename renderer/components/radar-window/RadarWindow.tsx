@@ -35,13 +35,6 @@ export interface RadarWindowProps {
  */
 export function RadarWindow({ instanceId, initialLocation, isPrimaryPopout }: RadarWindowProps) {
   const [location, setLocation] = useState<WindowLocation | null>(initialLocation);
-  // Bounds are relayed separately from location (see sendInstanceBounds) —
-  // the primary pop-out uses the "main" sentinel here so its viewport reaches
-  // the main window's own audit-log pairing, while its own real instanceId
-  // keeps driving location exactly as it already does (see the
-  // isPrimaryPopout comment on RadarWindowProps for why these two are
-  // deliberately kept separate).
-  const boundsInstanceId = isPrimaryPopout ? "main" : instanceId;
   const [isLocating, setIsLocating] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const settings = useRadarSettings();
@@ -149,7 +142,18 @@ export function RadarWindow({ instanceId, initialLocation, isPrimaryPopout }: Ra
             spcOutlookEnabled={spcOutlookEnabled}
             settings={settings}
             renderSettingsInline={false}
-            onBoundsChange={(bbox) => ipc.windows.sendInstanceBounds(boundsInstanceId, bbox)}
+            onBoundsChange={(bbox) => {
+              // Always relayed under this window's own real instanceId —
+              // that's what a paired conditions/audit-log window (opened
+              // either manually via RadarWindowToolbar, or automatically by
+              // the undock cascade for a primary popout — see
+              // windows:openRadar in electron/main.ts) is actually paired
+              // to. The primary popout *additionally* relays under the
+              // "main" sentinel, since the main window's own docked
+              // RightSidebar/audit-log still reads bounds that way too.
+              ipc.windows.sendInstanceBounds(instanceId, bbox);
+              if (isPrimaryPopout) ipc.windows.sendInstanceBounds("main", bbox);
+            }}
           />
         )}
       </div>

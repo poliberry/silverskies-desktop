@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Notification, nativeImage, nativeTheme, session, shell } from "electron";
+import { app, BrowserWindow, WebContentsView, ipcMain, Notification, nativeImage, nativeTheme, session, shell } from "electron";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import serve from "electron-serve";
@@ -51,6 +51,14 @@ interface TrackedWindow {
    * left off, and (for radar windows) relayed to any paired conditions
    * window whenever it changes. */
   location?: WindowLocation | null;
+  /** Only for role "browser" — the embedded page, layered as a child View
+   * over the chrome renderer's own toolbar (see attachBrowserContentView). */
+  browserView?: WebContentsView;
+  /** Only for role "browser" — repositions browserView once the chrome
+   * renderer reports its own real, measured height (see the
+   * browser:chromeHeight IPC handler) instead of trusting the
+   * BROWSER_CHROME_HEIGHT fallback to stay in sync with two files forever. */
+  browserRelayout?: (chromeHeight: number) => void;
 }
 
 const windows = new Map<number, TrackedWindow>();
@@ -140,7 +148,17 @@ const WINDOW_DEFAULTS: Record<WindowRole, { width: number; height: number; minWi
   conditions: { width: 380, height: 820, minWidth: 320, minHeight: 480 },
   alert: { width: 440, height: 600, minWidth: 360, minHeight: 400 },
   auditLog: { width: 420, height: 700, minWidth: 340, minHeight: 420 },
+  browser: { width: 1100, height: 800, minWidth: 500, minHeight: 400 },
 };
+
+// Fallback height (in CSS px) used for the "browser" role's embedded
+// WebContentsView only until the chrome renderer reports its own real,
+// measured height (see browserRelayout on TrackedWindow and the
+// browser:chromeHeight IPC handler below) — kept as a same-ballpark
+// starting point so content isn't briefly full-screen-under-the-toolbar
+// before that first measurement arrives, not as a value that has to stay
+// in exact sync with BrowserWindowChrome.tsx's actual layout.
+const BROWSER_CHROME_HEIGHT_FALLBACK = 64;
 
 interface CreateAppWindowOptions {
   role: WindowRole;
@@ -158,6 +176,59 @@ interface CreateAppWindowOptions {
    * own real instanceId — bounds-only, deliberately not touching how its
    * location is relayed (see registerWindowIpcHandlers' bounds relay). */
   isPrimaryPopout?: boolean;
+  /** Only for role "browser" — the page to load into the embedded
+   * WebContentsView, and a title for the chrome renderer's toolbar. */
+  browserUrl?: string;
+  browserTitle?: string;
+}
+
+/** Loads external content (a radar-station page, an IEM VTEC event, an SPC
+ * outlook page — see renderer/lib/browser/external-links.ts) into a
+ * sandboxed WebContentsView layered under the "browser" role's own chrome
+ * renderer, which draws just a toolbar and leaves the rest of its window
+ * transparent for this view to show through. Kept in the main process
+ * (rather than an in-renderer `<webview>`) since webviewTag is deliberately
+ * left disabled on every window here. */
+function attachBrowserContentView(win: BrowserWindow, tracked: TrackedWindow, url: string) {
+  const view = new WebContentsView({
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  tracked.browserView = view;
+  win.contentView.addChildView(view);
+
+  let chromeHeight = BROWSER_CHROME_HEIGHT_FALLBACK;
+  const layout = () => {
+    const [width, height] = win.getContentSize();
+    view.setBounds({ x: 0, y: chromeHeight, width, height: Math.max(0, height - chromeHeight) });
+  };
+  layout();
+  win.on("resize", layout);
+  tracked.browserRelayout = (measuredHeight: number) => {
+    chromeHeight = measuredHeight;
+    layout();
+  };
+
+  // Basic hardening — arbitrary external content shouldn't be able to spawn
+  // further Electron windows of its own.
+  view.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+
+  const sendState = () => {
+    if (win.isDestroyed()) return;
+    win.webContents.send("browser:state", {
+      url: view.webContents.getURL(),
+      title: view.webContents.getTitle(),
+      canGoBack: view.webContents.navigationHistory.canGoBack(),
+      canGoForward: view.webContents.navigationHistory.canGoForward(),
+      isLoading: view.webContents.isLoading(),
+    });
+  };
+  view.webContents.on("did-navigate", sendState);
+  view.webContents.on("did-navigate-in-page", sendState);
+  view.webContents.on("page-title-updated", sendState);
+  view.webContents.on("did-start-loading", sendState);
+  view.webContents.on("did-stop-loading", sendState);
+
+  view.webContents.loadURL(url).catch((err) => console.error("[browser] failed to load", url, err));
 }
 
 /** Generalized replacement for the old single-purpose createWindow() — every
@@ -209,6 +280,8 @@ function createAppWindow(opts: CreateAppWindowOptions): BrowserWindow {
   }
   if (opts.alertToken) query.set("token", opts.alertToken);
   if (opts.isPrimaryPopout) query.set("isPrimaryPopout", "1");
+  if (opts.browserUrl) query.set("url", opts.browserUrl);
+  if (opts.browserTitle) query.set("title", opts.browserTitle);
 
   if (isDev) {
     const qs = query.toString();
@@ -216,6 +289,10 @@ function createAppWindow(opts: CreateAppWindowOptions): BrowserWindow {
     win.webContents.openDevTools({ mode: "detach" });
   } else {
     loadProdApp(win, query);
+  }
+
+  if (opts.role === "browser" && opts.browserUrl) {
+    attachBrowserContentView(win, tracked, opts.browserUrl);
   }
 
   // Debounced so dragging/resizing doesn't spam disk writes — see
@@ -231,15 +308,46 @@ function createAppWindow(opts: CreateAppWindowOptions): BrowserWindow {
   win.on("unmaximize", sendMaximizeState);
 
   win.on("closed", () => {
+    const closedTracked = windows.get(win.id);
     windows.delete(win.id);
     if (win.id === primaryPopoutWindowId) {
       primaryPopoutWindowId = null;
       broadcastToAll("windows:primaryRadarClosed");
+      // Undocking the radar from the main app also opened a paired
+      // conditions + audit-log window and hid main (see windows:openRadar
+      // below) — reverse all three now that the radar itself is closing.
+      // Looked up fresh by pairedInstanceId rather than snapshotting what
+      // was auto-opened: openConditions/openAuditLog already dedupe to at
+      // most one window per instanceId, so "whatever's currently paired" and
+      // "whatever this cascade opened" are always the same window.
+      const closingInstanceId = closedTracked?.instanceId;
+      if (closingInstanceId) {
+        for (const tracked of [...windows.values()]) {
+          if (
+            (tracked.role === "conditions" || tracked.role === "auditLog") &&
+            tracked.pairedInstanceId === closingInstanceId &&
+            !tracked.win.isDestroyed()
+          ) {
+            tracked.win.close();
+          }
+        }
+      }
+      const mainWindow = getMainWindow();
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      }
     }
     if (win.id === primaryAuditLogPopoutWindowId) {
       primaryAuditLogPopoutWindowId = null;
       broadcastToAll("windows:primaryAuditLogClosed");
     }
+    // The window is already destroyed by the time "closed" fires (its
+    // contentView tree, including any embedded browserView, is torn down
+    // along with it) — just drop our own reference so nothing here keeps
+    // pointing at it.
+    if (closedTracked) closedTracked.browserView = undefined;
     scheduleSessionSave();
   });
 
@@ -271,7 +379,9 @@ async function saveSessionSnapshot() {
   for (const tracked of windows.values()) {
     // Alert windows are transient token-handoff popups — restoring them
     // on relaunch would mean restoring a payload that's already gone.
-    if (tracked.role === "alert") continue;
+    // Browser windows are equally transient (just a page someone opened to
+    // look something up) and aren't worth restoring either.
+    if (tracked.role === "alert" || tracked.role === "browser") continue;
     if (tracked.win.isDestroyed()) continue;
     const b = tracked.win.getBounds();
     entries.push({
@@ -457,6 +567,55 @@ function registerWindowControlHandlers() {
   ipcMain.handle("windowControls:isMaximized", (event) => BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false);
 }
 
+/** Shared by the windows:openConditions IPC handler and the radar-undock
+ * cascade (windows:openRadar below) — both need "find the conditions window
+ * already paired to this instanceId, or create one" and openConditions only
+ * ever creates at most one per instanceId, so there's nothing distinct
+ * between "auto-opened by the cascade" and "opened via this handler" to
+ * track separately. */
+function openOrShowConditionsWindow(opts: { instanceId: string; location?: WindowLocation | null }): BrowserWindow {
+  const existing = [...windows.values()].find(
+    (t) => t.role === "conditions" && t.pairedInstanceId === opts.instanceId,
+  );
+  if (existing) {
+    if (existing.win.isMinimized()) existing.win.restore();
+    existing.win.show();
+    existing.win.focus();
+    return existing.win;
+  }
+  return createAppWindow({
+    role: "conditions",
+    instanceId: randomUUID(),
+    pairedInstanceId: opts.instanceId,
+    location: opts.location ?? null,
+  });
+}
+
+/** Same idea as openOrShowConditionsWindow above, for the audit-log role. */
+function openOrShowAuditLogWindow(opts: {
+  instanceId: string;
+  location?: WindowLocation | null;
+  isPrimaryPopout?: boolean;
+}): BrowserWindow {
+  const existing = [...windows.values()].find(
+    (t) => t.role === "auditLog" && t.pairedInstanceId === opts.instanceId,
+  );
+  if (existing) {
+    if (existing.win.isMinimized()) existing.win.restore();
+    existing.win.show();
+    existing.win.focus();
+    return existing.win;
+  }
+  const win = createAppWindow({
+    role: "auditLog",
+    instanceId: randomUUID(),
+    pairedInstanceId: opts.instanceId,
+    location: opts.location ?? null,
+  });
+  if (opts.isPrimaryPopout) primaryAuditLogPopoutWindowId = win.id;
+  return win;
+}
+
 function registerWindowIpcHandlers() {
   ipcMain.handle(
     "windows:openRadar",
@@ -482,28 +641,24 @@ function registerWindowIpcHandlers() {
         location: opts.location ?? null,
         isPrimaryPopout: opts.isPrimaryPopout,
       });
-      if (opts.isPrimaryPopout) primaryPopoutWindowId = win.id;
+      if (opts.isPrimaryPopout) {
+        primaryPopoutWindowId = win.id;
+        // Undocking the radar from the main app also undocks the audit log
+        // and opens a conditions window for it, then hides the main window
+        // — reversed in this same window's "closed" handler above. Scoped
+        // only to this primary-popout path, not the independent "New Radar
+        // Window" action (windows:openRadar without isPrimaryPopout).
+        openOrShowConditionsWindow({ instanceId, location: opts.location ?? null });
+        openOrShowAuditLogWindow({ instanceId, location: opts.location ?? null });
+        getMainWindow()?.hide();
+      }
     },
   );
 
   ipcMain.handle(
     "windows:openConditions",
     (_event, opts: { instanceId: string; location?: WindowLocation | null }) => {
-      const existing = [...windows.values()].find(
-        (t) => t.role === "conditions" && t.pairedInstanceId === opts.instanceId,
-      );
-      if (existing) {
-        if (existing.win.isMinimized()) existing.win.restore();
-        existing.win.show();
-        existing.win.focus();
-        return;
-      }
-      createAppWindow({
-        role: "conditions",
-        instanceId: randomUUID(),
-        pairedInstanceId: opts.instanceId,
-        location: opts.location ?? null,
-      });
+      openOrShowConditionsWindow(opts);
     },
   );
 
@@ -513,24 +668,34 @@ function registerWindowIpcHandlers() {
       _event,
       opts: { instanceId: string; location?: WindowLocation | null; isPrimaryPopout?: boolean },
     ) => {
-      const existing = [...windows.values()].find(
-        (t) => t.role === "auditLog" && t.pairedInstanceId === opts.instanceId,
-      );
-      if (existing) {
-        if (existing.win.isMinimized()) existing.win.restore();
-        existing.win.show();
-        existing.win.focus();
-        return;
-      }
-      const win = createAppWindow({
-        role: "auditLog",
-        instanceId: randomUUID(),
-        pairedInstanceId: opts.instanceId,
-        location: opts.location ?? null,
-      });
-      if (opts.isPrimaryPopout) primaryAuditLogPopoutWindowId = win.id;
+      openOrShowAuditLogWindow(opts);
     },
   );
+
+  ipcMain.handle("windows:openBrowser", (_event, opts: { url: string; title?: string }) => {
+    createAppWindow({ role: "browser", browserUrl: opts.url, browserTitle: opts.title });
+  });
+
+  function getBrowserView(event: Electron.IpcMainInvokeEvent): WebContentsView | undefined {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return win ? windows.get(win.id)?.browserView : undefined;
+  }
+
+  ipcMain.handle("browser:navigate", (event, url: string) => {
+    void getBrowserView(event)?.webContents.loadURL(url);
+  });
+  ipcMain.handle("browser:goBack", (event) => getBrowserView(event)?.webContents.navigationHistory.goBack());
+  ipcMain.handle("browser:goForward", (event) => getBrowserView(event)?.webContents.navigationHistory.goForward());
+  ipcMain.handle("browser:reload", (event) => getBrowserView(event)?.webContents.reload());
+  // The chrome renderer measures its own title-bar + nav-bar height (it can
+  // vary slightly with OS font/DPI settings) and reports it here once
+  // mounted, rather than this main-process file and BrowserWindowChrome.tsx
+  // each hardcoding the same pixel number and silently drifting apart.
+  ipcMain.on("browser:chromeHeight", (event, height: number) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const tracked = win && windows.get(win.id);
+    tracked?.browserRelayout?.(height);
+  });
 
   ipcMain.handle("windows:openAlert", (_event, alert: unknown) => {
     const token = randomUUID();
@@ -692,7 +857,7 @@ app.whenReady().then(async () => {
   // them (the snapshot itself is left alone, in case they flip back).
   if (config.uiMode === "advanced") {
     for (const entry of savedSession.windows) {
-      if (entry.role === "main" || entry.role === "alert") continue;
+      if (entry.role === "main" || entry.role === "alert" || entry.role === "browser") continue;
       const win = createAppWindow({
         role: entry.role,
         instanceId: entry.instanceId,
@@ -712,6 +877,11 @@ app.whenReady().then(async () => {
         else if (entry.role === "auditLog") primaryAuditLogPopoutWindowId = win.id;
       }
     }
+    // A relaunch that restores an already-undocked primary radar should
+    // restore main's hidden state too, not just reopen the pop-out windows
+    // (which, being individually restored above rather than routed back
+    // through windows:openRadar, don't re-trigger the undock cascade itself).
+    if (primaryPopoutWindowId !== null) getMainWindow()?.hide();
   }
 
   // Silently checks (never downloads/installs on its own — see

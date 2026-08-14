@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useClock } from "@/hooks/useClock";
 import { fmtClockTime } from "@/lib/units";
 import type { TimeFormatPref, UnitPref } from "@/types/settings";
@@ -23,6 +24,14 @@ export interface TopBarProps {
   radarPoppedOut?: boolean;
   onPopOutRadar?: () => void;
   onNewRadarWindow?: () => void;
+  /** The Weather Radio toolbar toggle (a Sheet trigger + its content) —
+   * rendered as a slot, same reasoning as LeftSidebar's settingsSlot, so
+   * this component doesn't need to import the Sheet/weather-radio pieces
+   * directly. */
+  radioSlot?: ReactNode;
+  /** Fires on every click of the logo — Shell counts these to trigger the
+   * asteroid-shooter easter egg after 10 in a row. */
+  onLogoClick?: () => void;
 }
 
 export function TopBar({
@@ -39,6 +48,8 @@ export function TopBar({
   radarPoppedOut,
   onPopOutRadar,
   onNewRadarWindow,
+  radioSlot,
+  onLogoClick,
 }: TopBarProps) {
   const clock = useClock(timezone, timeFormat);
 
@@ -50,7 +61,15 @@ export function TopBar({
       {/* Fixed muted neutral rather than the weather-condition accent — a
           watermark-style mark shouldn't dim to near-invisible whenever the
           current condition happens to resolve to a dark accent hue. */}
-      <Logo style={{ height: 20, width: "auto", display: "block", color: "var(--text2)", flexShrink: 0 }} />
+      <button
+        type="button"
+        className="no-drag"
+        onClick={onLogoClick}
+        style={{ background: "none", border: "none", padding: 0, cursor: onLogoClick ? "pointer" : "default" }}
+        aria-label="Silver Skies"
+      >
+        <Logo style={{ height: 20, width: "auto", display: "block", color: "var(--text2)", flexShrink: 0 }} />
+      </button>
 
       <div className="flex min-w-0 items-baseline gap-2 overflow-hidden">
         <span className="truncate text-base font-light" style={{ letterSpacing: "-0.01em" }}>
@@ -94,6 +113,7 @@ export function TopBar({
             </button>
           </div>
         )}
+        {radioSlot}
         <button className={`refresh-btn ${isRefreshing ? "spinning" : ""}`} onClick={onRefresh}>
           <span className="ri">↻</span>
         </button>

@@ -113,6 +113,35 @@ const api = {
       return () => ipcRenderer.removeListener("windows:primaryAuditLogClosed", listener);
     },
     isPrimaryAuditLogOpen: (): Promise<boolean> => ipcRenderer.invoke("windows:isPrimaryAuditLogOpen"),
+    openBrowser: (opts: { url: string; title?: string }): Promise<void> =>
+      ipcRenderer.invoke("windows:openBrowser", opts),
+  },
+  // Controls for the sandboxed WebContentsView a "browser" role window
+  // embeds (see electron/main.ts's attachBrowserContentView) — the
+  // navigation itself happens entirely in the main process, so these are
+  // just remote-control calls plus a push-state subscription.
+  browser: {
+    navigate: (url: string): Promise<void> => ipcRenderer.invoke("browser:navigate", url),
+    goBack: (): Promise<void> => ipcRenderer.invoke("browser:goBack"),
+    goForward: (): Promise<void> => ipcRenderer.invoke("browser:goForward"),
+    reload: (): Promise<void> => ipcRenderer.invoke("browser:reload"),
+    reportChromeHeight: (height: number): void => ipcRenderer.send("browser:chromeHeight", height),
+    onState: (
+      callback: (state: {
+        url: string;
+        title: string;
+        canGoBack: boolean;
+        canGoForward: boolean;
+        isLoading: boolean;
+      }) => void,
+    ): (() => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        state: { url: string; title: string; canGoBack: boolean; canGoForward: boolean; isLoading: boolean },
+      ) => callback(state);
+      ipcRenderer.on("browser:state", listener);
+      return () => ipcRenderer.removeListener("browser:state", listener);
+    },
   },
   // Every window is frameless and draws its own titlebar (drag region +
   // these three buttons) — see WindowControlButtons.tsx on the renderer

@@ -6,9 +6,10 @@ import { RadarWindow } from "@/components/radar-window/RadarWindow";
 import { ConditionsWindow } from "@/components/conditions-window/ConditionsWindow";
 import { AuditLogWindow } from "@/components/audit-log-window/AuditLogWindow";
 import { AlertWindow } from "@/components/alert-window/AlertWindow";
+import { BrowserWindowChrome } from "@/components/browser-window/BrowserWindowChrome";
 import type { WindowLocation } from "@/types/windows";
 
-type ParsedRole = "main" | "radar" | "conditions" | "alert" | "auditLog";
+type ParsedRole = "main" | "radar" | "conditions" | "alert" | "auditLog" | "browser";
 
 interface ParsedWindowParams {
   role: ParsedRole;
@@ -17,13 +18,19 @@ interface ParsedWindowParams {
   location: WindowLocation | null;
   token: string | null;
   isPrimaryPopout: boolean;
+  url: string | null;
+  title: string | null;
 }
 
 function parseWindowParams(): ParsedWindowParams {
   const params = new URLSearchParams(window.location.search);
   const rawRole = params.get("window");
   const role: ParsedRole =
-    rawRole === "radar" || rawRole === "conditions" || rawRole === "alert" || rawRole === "auditLog"
+    rawRole === "radar" ||
+    rawRole === "conditions" ||
+    rawRole === "alert" ||
+    rawRole === "auditLog" ||
+    rawRole === "browser"
       ? rawRole
       : "main";
   const lat = params.get("lat");
@@ -37,6 +44,8 @@ function parseWindowParams(): ParsedWindowParams {
     location,
     token: params.get("token"),
     isPrimaryPopout: params.get("isPrimaryPopout") === "1",
+    url: params.get("url"),
+    title: params.get("title"),
   };
 }
 
@@ -78,6 +87,8 @@ export function WindowRouter() {
       );
     case "alert":
       return <AlertWindow token={params.token ?? ""} />;
+    case "browser":
+      return <BrowserWindowChrome url={params.url ?? ""} title={params.title} />;
     default:
       return <Shell />;
   }

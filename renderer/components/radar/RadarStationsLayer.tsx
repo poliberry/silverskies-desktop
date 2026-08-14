@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
-import { Marker } from "react-leaflet";
+import { Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import { useRadarStations } from "@/hooks/useRadarStations";
+import { nwsRadarStationUrl } from "@/lib/browser/external-links";
+import { ipc } from "@/lib/ipc-client";
 
 export interface RadarStationsLayerProps {
   onSelect: (stationId: string) => void;
@@ -36,7 +38,17 @@ export function RadarStationsLayer({ onSelect }: RadarStationsLayerProps) {
             position={[s.lat, s.lon]}
             icon={stationIcon(s.id, alarm)}
             eventHandlers={{ click: () => onSelect(s.id) }}
-          />
+          >
+            <Popup>
+              <button
+                type="button"
+                className="unit-btn"
+                onClick={() => void ipc.windows.openBrowser({ url: nwsRadarStationUrl(s.id), title: `${s.id} — NWS Radar` })}
+              >
+                View Station Info ↗
+              </button>
+            </Popup>
+          </Marker>
         );
       }),
     [data, onSelect],

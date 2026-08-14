@@ -83,6 +83,9 @@ export function RadarSettingsDropdowns({ colorSchemes, settings, overlaysAvailab
             <DropdownMenuCheckboxItem checked={settings.showRadarStations} onCheckedChange={settings.toggleRadarStations}>
               Radar Stations
             </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={settings.showWindBarbs} onCheckedChange={settings.toggleWindBarbs}>
+              Wind Barbs
+            </DropdownMenuCheckboxItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>

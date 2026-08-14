@@ -1,6 +1,6 @@
 import type { ConfigFile, LocationsFile, SavedLocation } from "@/types/settings";
 import type { AppInfo, UpdaterStatus } from "@/types/updater";
-import type { MapViewBounds, WindowLocation } from "@/types/windows";
+import type { BrowserWindowState, MapViewBounds, WindowLocation } from "@/types/windows";
 import type { NormalizedAlert } from "@/types/alerts";
 import "@/types/ipc";
 
@@ -26,6 +26,9 @@ const DEFAULT_CONFIG: ConfigFile = {
   alertTypeOverrides: {},
   themeId: "default",
   customTheme: null,
+  weatherRadioEnabled: false,
+  weatherRadioMode: "simulated",
+  weatherRadioLiveStreamUrl: null,
 };
 
 let warned = false;
@@ -196,6 +199,36 @@ export const ipc = {
     async isPrimaryAuditLogOpen(): Promise<boolean> {
       if (!window.silverSkies) return false;
       return window.silverSkies.windows.isPrimaryAuditLogOpen();
+    },
+    async openBrowser(opts: { url: string; title?: string }): Promise<void> {
+      if (!window.silverSkies) { warnNoBridge(); return; }
+      return window.silverSkies.windows.openBrowser(opts);
+    },
+  },
+  browser: {
+    async navigate(url: string): Promise<void> {
+      if (!window.silverSkies) return;
+      return window.silverSkies.browser.navigate(url);
+    },
+    async goBack(): Promise<void> {
+      if (!window.silverSkies) return;
+      return window.silverSkies.browser.goBack();
+    },
+    async goForward(): Promise<void> {
+      if (!window.silverSkies) return;
+      return window.silverSkies.browser.goForward();
+    },
+    async reload(): Promise<void> {
+      if (!window.silverSkies) return;
+      return window.silverSkies.browser.reload();
+    },
+    reportChromeHeight(height: number): void {
+      if (!window.silverSkies) return;
+      window.silverSkies.browser.reportChromeHeight(height);
+    },
+    onState(callback: (state: BrowserWindowState) => void): () => void {
+      if (!window.silverSkies) return () => {};
+      return window.silverSkies.browser.onState(callback);
     },
   },
   windowControls: {

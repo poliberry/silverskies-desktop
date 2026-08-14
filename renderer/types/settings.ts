@@ -60,6 +60,13 @@ export interface ConfigFile {
   /** The user's last loaded/pasted custom theme JSON, kept even while a
    * builtin theme is selected so switching back to "custom" doesn't lose it. */
   customTheme: ThemeDefinition | null;
+  /** NWS weather radio easter feature — see lib/weather-radio. */
+  weatherRadioEnabled: boolean;
+  /** "simulated" synthesizes the SAME attention tone + reads the alert aloud
+   * via speech synthesis; "live" plays a user-supplied audio stream while
+   * attempting to decode real SAME tones from it. */
+  weatherRadioMode: "simulated" | "live";
+  weatherRadioLiveStreamUrl: string | null;
 }
 
 export interface ThemeColors {
