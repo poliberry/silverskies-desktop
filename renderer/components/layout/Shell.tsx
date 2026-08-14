@@ -75,6 +75,16 @@ export function Shell() {
     [],
   );
   useEffect(() => {
+    // Classic mode's reset effect below always forces this to `false` and
+    // hides the only in-app control that could redock it — so an
+    // in-flight/late response here must never override that while classic,
+    // or a primary pop-out that happens to still be open (surviving a mode
+    // switch, restored from session.json, etc.) would leave the docked
+    // radar hidden with no way to bring it back short of toggling the
+    // Interface setting back to Advanced. Re-checks whenever `isAdvancedUi`
+    // flips to true, rather than only once on mount, so switching into
+    // Advanced always reflects whatever's actually already open.
+    if (!isAdvancedUi) return;
     let cancelled = false;
     void ipc.windows.isPrimaryRadarOpen().then((open) => {
       if (!cancelled) setRadarPoppedOut(open);
@@ -82,18 +92,51 @@ export function Shell() {
     return () => {
       cancelled = true;
     };
-  }, []);
-  // Classic mode has no in-app way to redock (the Pop Out button only
-  // renders in advanced mode) — without this, switching Settings → Interface
+  }, [isAdvancedUi]);
+
+  // Same "pop the main window's own docked panel out" pattern as radar
+  // above, independently tracked — the audit log paired to the "main"
+  // sentinel instanceId (see handlePopOutAuditLog) rather than a real radar
+  // instance.
+  const [auditLogPoppedOut, setAuditLogPoppedOut] = useState<boolean | null>(null);
+  const popoutAuditLogRequestInFlightRef = useRef(false);
+  useEffect(
+    () =>
+      ipc.windows.onPrimaryAuditLogClosed(() => {
+        setAuditLogPoppedOut(false);
+        popoutAuditLogRequestInFlightRef.current = false;
+      }),
+    [],
+  );
+  useEffect(() => {
+    // Same reasoning as the radar mount-check above: only apply this while
+    // still in Advanced, and re-run whenever `isAdvancedUi` flips to true,
+    // so a restored primary audit-log window can't silently overwrite the
+    // classic-mode reset and leave the docked audit log permanently hidden
+    // with no visible way to bring it back.
+    if (!isAdvancedUi) return;
+    let cancelled = false;
+    void ipc.windows.isPrimaryAuditLogOpen().then((open) => {
+      if (!cancelled) setAuditLogPoppedOut(open);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdvancedUi]);
+
+  // Classic mode has no in-app way to redock (the Pop Out buttons only
+  // render in advanced mode) — without this, switching Settings → Interface
   // from Advanced to Classic while undocked left the main window with no
-  // visible radar at all, and no way to get one back short of manually
-  // closing the separate radar window. The orphaned pop-out (if the user
-  // had one) is left open and fully functional on its own; only Shell's
-  // own docked/undocked layout is forced back to docked.
+  // visible radar/audit-log at all, and no way to get one back short of
+  // manually closing the separate window(s). Any orphaned pop-out(s) are
+  // left open and fully functional on their own; only Shell's own docked/
+  // undocked layout is forced back to docked.
   useEffect(() => {
     if (!isAdvancedUi) {
       setRadarPoppedOut(false);
       popoutRequestInFlightRef.current = false;
+      setAuditLogPoppedOut(false);
+      popoutAuditLogRequestInFlightRef.current = false;
     }
   }, [isAdvancedUi]);
   const [demoAlerts, setDemoAlerts] = useState<NormalizedAlert[]>([]);
@@ -185,6 +228,29 @@ export function Shell() {
     });
   }
 
+  // Keeps a popped-out "main" audit-log window (if any) live-updated as the
+  // main window's own active location changes — a no-op relay on main's
+  // side when no such window is open, exactly like a radar instance's own
+  // sendInstanceLocation calls are harmless when it has no paired windows.
+  useEffect(() => {
+    if (active) ipc.windows.sendInstanceLocation("main", { lat: active.lat, lon: active.lon, label: active.label });
+    // Depends on the primitive fields, not `active` itself — avoids
+    // re-sending on every render if the hook it comes from hands back a new
+    // object reference for an unchanged location.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.lat, active?.lon, active?.label]);
+
+  function handlePopOutAuditLog() {
+    if (auditLogPoppedOut || popoutAuditLogRequestInFlightRef.current) return;
+    popoutAuditLogRequestInFlightRef.current = true;
+    setAuditLogPoppedOut(true);
+    void ipc.windows.openAuditLog({
+      instanceId: "main",
+      location: active ? { lat: active.lat, lon: active.lon, label: active.label } : null,
+      isPrimaryPopout: true,
+    });
+  }
+
   return (
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: "var(--bg)" }}>
       {/* Only the main window gets the animated gradient sweep — pop-out
@@ -209,10 +275,12 @@ export function Shell() {
           onSetUnit={(u) => updateConfig({ units: u })}
           timezone={weatherQuery.data?.timezone}
           timeFormat={timeFormat}
-          showRadarWindowActions={isAdvancedUi}
+          showWindowActions={isAdvancedUi}
           radarPoppedOut={radarPoppedOut === true}
           onPopOutRadar={handlePopOutRadar}
           onNewRadarWindow={handleNewRadarWindow}
+          auditLogPoppedOut={auditLogPoppedOut === true}
+          onPopOutAuditLog={handlePopOutAuditLog}
         />
       </div>
 
@@ -239,12 +307,13 @@ export function Shell() {
         />
 
         <div className="flex min-h-0 flex-col gap-4">
-          {/* Strictly `=== false`, not `!radarPoppedOut` — while it's still
-              `null` (state not yet confirmed with main), rendering nothing
-              here is what avoids briefly mounting a duplicate docked radar
-              that then immediately unmounts once the real state arrives. */}
+          {/* Strictly `=== false`, not `!radarPoppedOut`/`!auditLogPoppedOut`
+              — while either is still `null` (state not yet confirmed with
+              main), rendering nothing here is what avoids briefly mounting a
+              duplicate docked panel that then immediately unmounts once the
+              real state arrives. */}
           {radarPoppedOut === false && (
-            <div className="min-h-0" style={{ flex: "2 1 0%" }}>
+            <div className="min-h-0" style={{ flex: auditLogPoppedOut === false ? "2 1 0%" : "1 1 100%" }}>
               {active && (
                 <RadarMap
                   lat={active.lat}
@@ -259,17 +328,24 @@ export function Shell() {
               )}
             </div>
           )}
-          {/* Popping the radar out frees the whole column for the audit log
-              instead of splitting it 2:1 with the map. */}
-          <div className="glass-card min-h-0 p-3" style={{ flex: radarPoppedOut === true ? "1 1 100%" : "1 1 0%" }}>
-            <AlertLog
-              alerts={alertsQuery.data ?? []}
-              isLoading={alertsQuery.isLoading}
-              demoAlerts={demoAlerts}
-              todayOutlook={todayOutlook}
-              spcOutlook={spcOutlook}
-            />
-          </div>
+          {/* Popping either one out frees the whole column for whichever
+              panel is still docked, instead of splitting it 2:1. */}
+          {auditLogPoppedOut === false && (
+            <div className="glass-card min-h-0 p-3" style={{ flex: radarPoppedOut === false ? "1 1 0%" : "1 1 100%" }}>
+              <AlertLog
+                alerts={alertsQuery.data ?? []}
+                isLoading={alertsQuery.isLoading}
+                demoAlerts={demoAlerts}
+                todayOutlook={todayOutlook}
+                spcOutlook={spcOutlook}
+              />
+            </div>
+          )}
+          {radarPoppedOut === true && auditLogPoppedOut === true && (
+            <div className="glass-card flex min-h-0 flex-1 items-center justify-center p-6 text-center">
+              <p className="geo-notice">Radar and Audit Log are both open in their own windows.</p>
+            </div>
+          )}
         </div>
 
         <RightSidebar

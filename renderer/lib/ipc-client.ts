@@ -144,6 +144,14 @@ export const ipc = {
       if (!window.silverSkies) { warnNoBridge(); return; }
       return window.silverSkies.windows.openConditions(opts);
     },
+    async openAuditLog(opts: {
+      instanceId: string;
+      location?: WindowLocation | null;
+      isPrimaryPopout?: boolean;
+    }): Promise<void> {
+      if (!window.silverSkies) { warnNoBridge(); return; }
+      return window.silverSkies.windows.openAuditLog(opts);
+    },
     async openAlert(alert: NormalizedAlert): Promise<void> {
       if (!window.silverSkies) { warnNoBridge(); return; }
       return window.silverSkies.windows.openAlert(alert);
@@ -167,6 +175,14 @@ export const ipc = {
     async isPrimaryRadarOpen(): Promise<boolean> {
       if (!window.silverSkies) return false;
       return window.silverSkies.windows.isPrimaryRadarOpen();
+    },
+    onPrimaryAuditLogClosed(callback: () => void): () => void {
+      if (!window.silverSkies) return () => {};
+      return window.silverSkies.windows.onPrimaryAuditLogClosed(callback);
+    },
+    async isPrimaryAuditLogOpen(): Promise<boolean> {
+      if (!window.silverSkies) return false;
+      return window.silverSkies.windows.isPrimaryAuditLogOpen();
     },
   },
   windowControls: {

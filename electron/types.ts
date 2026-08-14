@@ -77,10 +77,10 @@ export interface ThemeDefinition {
 }
 
 /** A window's "kind" — every non-main window is one of these, carrying its
- * own independent radar/conditions state (see electron/main.ts's window
- * registry). "alert" windows are transient (token handoff only) and are
- * never persisted to SessionFile. */
-export type WindowRole = "main" | "radar" | "conditions" | "alert";
+ * own independent radar/conditions/audit-log state (see electron/main.ts's
+ * window registry). "alert" windows are transient (token handoff only) and
+ * are never persisted to SessionFile. */
+export type WindowRole = "main" | "radar" | "conditions" | "alert" | "auditLog";
 
 export interface WindowLocation {
   lat: number;
@@ -100,12 +100,15 @@ export interface SessionWindowEntry {
   /** Unique per radar/conditions instance. Absent for "main" (there's only
    * ever one) — "alert" windows are never persisted at all. */
   instanceId?: string;
-  /** For a "conditions" window, the radar instanceId whose location it tracks. */
+  /** For a "conditions"/"auditLog" window, the radar instanceId (or the
+   * "main" sentinel — see electron/main.ts) whose location it tracks. */
   pairedInstanceId?: string;
-  /** True for the one radar window (if any) that undocked the *main*
-   * window's own radar — restored as the tracked "primary popout" on
-   * relaunch so Shell knows to stay undocked instead of resetting to
-   * docked on the next launch/refresh. */
+  /** True for the one radar window and/or the one auditLog window (each
+   * tracked independently — see main.ts's primaryPopoutWindowId and
+   * primaryAuditLogPopoutWindowId) that undocked one of the *main* window's
+   * own docked panels — restored as the corresponding tracked "primary
+   * popout" on relaunch so Shell knows to stay undocked instead of
+   * resetting to docked on the next launch/refresh. */
   isPrimaryPopout?: boolean;
   location?: WindowLocation | null;
   bounds?: WindowBoundsRect;
