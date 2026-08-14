@@ -235,16 +235,22 @@ function AlertsBoundsController({
   // `click` handler below) — so it never reaches anything at all. Attached
   // once, independent of drag state, since the click always arrives *after*
   // onUp has already cleared dragStart.
+  //
+  // On `document`, not `map.getContainer()` — the same "released outside the
+  // map" case onMove/onUp above already handle means this click can land
+  // anywhere in the document too, not just inside the map. A container-
+  // scoped listener would never see (and never clear) the flag for such a
+  // click, permanently stuck `true` and swallowing the next unrelated click
+  // that happens to land back inside the map.
   useEffect(() => {
-    const container = map.getContainer();
     function onClickCapture(e: MouseEvent) {
       if (!suppressNextClickRef.current) return;
       suppressNextClickRef.current = false;
       e.stopPropagation();
     }
-    container.addEventListener("click", onClickCapture, true);
-    return () => container.removeEventListener("click", onClickCapture, true);
-  }, [map]);
+    document.addEventListener("click", onClickCapture, true);
+    return () => document.removeEventListener("click", onClickCapture, true);
+  }, []);
 
   useMapEvents({
     moveend: () => {
