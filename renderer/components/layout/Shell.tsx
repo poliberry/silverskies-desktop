@@ -75,6 +75,16 @@ export function Shell() {
     [],
   );
   useEffect(() => {
+    // Classic mode's reset effect below always forces this to `false` and
+    // hides the only in-app control that could redock it — so an
+    // in-flight/late response here must never override that while classic,
+    // or a primary pop-out that happens to still be open (surviving a mode
+    // switch, restored from session.json, etc.) would leave the docked
+    // radar hidden with no way to bring it back short of toggling the
+    // Interface setting back to Advanced. Re-checks whenever `isAdvancedUi`
+    // flips to true, rather than only once on mount, so switching into
+    // Advanced always reflects whatever's actually already open.
+    if (!isAdvancedUi) return;
     let cancelled = false;
     void ipc.windows.isPrimaryRadarOpen().then((open) => {
       if (!cancelled) setRadarPoppedOut(open);
@@ -82,7 +92,7 @@ export function Shell() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAdvancedUi]);
 
   // Same "pop the main window's own docked panel out" pattern as radar
   // above, independently tracked — the audit log paired to the "main"
@@ -99,6 +109,12 @@ export function Shell() {
     [],
   );
   useEffect(() => {
+    // Same reasoning as the radar mount-check above: only apply this while
+    // still in Advanced, and re-run whenever `isAdvancedUi` flips to true,
+    // so a restored primary audit-log window can't silently overwrite the
+    // classic-mode reset and leave the docked audit log permanently hidden
+    // with no visible way to bring it back.
+    if (!isAdvancedUi) return;
     let cancelled = false;
     void ipc.windows.isPrimaryAuditLogOpen().then((open) => {
       if (!cancelled) setAuditLogPoppedOut(open);
@@ -106,7 +122,7 @@ export function Shell() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAdvancedUi]);
 
   // Classic mode has no in-app way to redock (the Pop Out buttons only
   // render in advanced mode) — without this, switching Settings → Interface
