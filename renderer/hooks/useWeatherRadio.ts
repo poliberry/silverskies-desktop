@@ -12,7 +12,8 @@ export interface UseWeatherRadioOptions {
   /** The alert set to watch for new arrivals — the active location's alerts
    * unioned with whatever's in the shift-drag bounding box, deduped by id.
    * Only used in "simulated" mode; "live" mode's audio comes from a real
-   * stream instead (see LiveStreamPlayer). */
+   * stream instead (see CustomAudioPlayer, in the standalone Weather Radio
+   * pop-up window). */
   alerts: NormalizedAlert[];
 }
 

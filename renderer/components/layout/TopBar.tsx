@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { useClock } from "@/hooks/useClock";
 import { fmtClockTime } from "@/lib/units";
 import type { TimeFormatPref, UnitPref } from "@/types/settings";
@@ -24,11 +23,9 @@ export interface TopBarProps {
   radarPoppedOut?: boolean;
   onPopOutRadar?: () => void;
   onNewRadarWindow?: () => void;
-  /** The Weather Radio toolbar toggle (a Sheet trigger + its content) —
-   * rendered as a slot, same reasoning as LeftSidebar's settingsSlot, so
-   * this component doesn't need to import the Sheet/weather-radio pieces
-   * directly. */
-  radioSlot?: ReactNode;
+  /** Opens the standalone Weather Radio pop-up window. */
+  onOpenRadio?: () => void;
+  radioEnabled?: boolean;
   /** Fires on every click of the logo — Shell counts these to trigger the
    * asteroid-shooter easter egg after 10 in a row. */
   onLogoClick?: () => void;
@@ -48,7 +45,8 @@ export function TopBar({
   radarPoppedOut,
   onPopOutRadar,
   onNewRadarWindow,
-  radioSlot,
+  onOpenRadio,
+  radioEnabled,
   onLogoClick,
 }: TopBarProps) {
   const clock = useClock(timezone, timeFormat);
@@ -113,7 +111,14 @@ export function TopBar({
             </button>
           </div>
         )}
-        {radioSlot}
+        <button
+          className={`unit-btn ${radioEnabled ? "active" : ""}`}
+          onClick={onOpenRadio}
+          title="Weather Radio"
+          aria-label="Weather Radio"
+        >
+          <i className="ph ph-radio" aria-hidden="true" />
+        </button>
         <button className={`refresh-btn ${isRefreshing ? "spinning" : ""}`} onClick={onRefresh}>
           <span className="ri">↻</span>
         </button>

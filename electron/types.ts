@@ -92,7 +92,7 @@ export interface ThemeDefinition {
  * own independent radar/conditions/audit-log state (see electron/main.ts's
  * window registry). "alert" windows are transient (token handoff only) and
  * are never persisted to SessionFile. */
-export type WindowRole = "main" | "radar" | "conditions" | "alert" | "auditLog" | "browser";
+export type WindowRole = "main" | "radar" | "conditions" | "alert" | "auditLog" | "browser" | "weatherRadio";
 
 export interface WindowLocation {
   lat: number;

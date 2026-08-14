@@ -56,6 +56,7 @@ export interface SilverSkiesApi {
     onPrimaryAuditLogClosed(callback: () => void): () => void;
     isPrimaryAuditLogOpen(): Promise<boolean>;
     openBrowser(opts: { url: string; title?: string }): Promise<void>;
+    openWeatherRadio(opts?: { location?: WindowLocation | null }): Promise<void>;
   };
   browser: {
     navigate(url: string): Promise<void>;

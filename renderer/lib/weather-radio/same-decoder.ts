@@ -59,7 +59,7 @@ export function parseSameHeader(raw: string): ParsedSameHeader | null {
  * lossy-compressed, which can distort the precise tone timing/frequency
  * content AFSK demodulation depends on. A garbled frame just means
  * parseSameHeader returns null for that attempt — the caller
- * (LiveStreamPlayer) surfaces that as "could not fully parse a header yet"
+ * (CustomAudioPlayer) surfaces that as "could not fully parse a header yet"
  * rather than treating it as an error.
  */
 export class SameDecoder {

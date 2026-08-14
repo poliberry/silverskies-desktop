@@ -7,9 +7,10 @@ import { ConditionsWindow } from "@/components/conditions-window/ConditionsWindo
 import { AuditLogWindow } from "@/components/audit-log-window/AuditLogWindow";
 import { AlertWindow } from "@/components/alert-window/AlertWindow";
 import { BrowserWindowChrome } from "@/components/browser-window/BrowserWindowChrome";
+import { WeatherRadioWindow } from "@/components/weather-radio-window/WeatherRadioWindow";
 import type { WindowLocation } from "@/types/windows";
 
-type ParsedRole = "main" | "radar" | "conditions" | "alert" | "auditLog" | "browser";
+type ParsedRole = "main" | "radar" | "conditions" | "alert" | "auditLog" | "browser" | "weatherRadio";
 
 interface ParsedWindowParams {
   role: ParsedRole;
@@ -30,7 +31,8 @@ function parseWindowParams(): ParsedWindowParams {
     rawRole === "conditions" ||
     rawRole === "alert" ||
     rawRole === "auditLog" ||
-    rawRole === "browser"
+    rawRole === "browser" ||
+    rawRole === "weatherRadio"
       ? rawRole
       : "main";
   const lat = params.get("lat");
@@ -89,6 +91,8 @@ export function WindowRouter() {
       return <AlertWindow token={params.token ?? ""} />;
     case "browser":
       return <BrowserWindowChrome url={params.url ?? ""} title={params.title} />;
+    case "weatherRadio":
+      return <WeatherRadioWindow initialLocation={params.location} />;
     default:
       return <Shell />;
   }

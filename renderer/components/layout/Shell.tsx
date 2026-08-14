@@ -28,8 +28,6 @@ import { useLogoClickCounter } from "@/hooks/useLogoClickCounter";
 import { useWeatherRadio } from "@/hooks/useWeatherRadio";
 import { AsteroidCountdown } from "@/components/easter-eggs/AsteroidCountdown";
 import { AsteroidShooterGame } from "@/components/easter-eggs/AsteroidShooterGame";
-import { Sheet, SheetTrigger, SheetContent } from "@/components/ui/sheet";
-import { WeatherRadioSheetContent } from "@/components/weather-radio/WeatherRadioSheetContent";
 import { activeSeverePulseColor } from "@/lib/alerts/merge";
 import { findOutlookAtPoint } from "@/lib/alerts/spc-outlook";
 import { buildTodayOutlook } from "@/lib/forecast-outlook";
@@ -193,7 +191,7 @@ export function Shell() {
   // the radar's currently showing on screen (deduped by id) for new arrivals
   // to announce; see useWeatherRadio for the simulated tone+speech pipeline
   // itself (live mode's audio comes from a real stream instead, played from
-  // the toolbar's own Sheet panel below).
+  // the standalone Weather Radio pop-up window — see onOpenRadio below).
   const radioAlertIds = new Set<string>();
   const radioAlerts = [...(alertsQuery.data ?? []), ...(boundsAlertsQuery.data ?? [])].filter((a) => {
     if (radioAlertIds.has(a.id)) return false;
@@ -394,24 +392,8 @@ export function Shell() {
           onPopOutRadar={handlePopOutRadar}
           onNewRadarWindow={handleNewRadarWindow}
           onLogoClick={handleLogoClick}
-          radioSlot={
-            <Sheet>
-              <SheetTrigger
-                render={
-                  <button
-                    className={`unit-btn ${config?.weatherRadioEnabled ? "active" : ""}`}
-                    title="Weather Radio"
-                    aria-label="Weather Radio"
-                  >
-                    <i className="ph ph-radio" aria-hidden="true" />
-                  </button>
-                }
-              />
-              <SheetContent>
-                <WeatherRadioSheetContent location={active} />
-              </SheetContent>
-            </Sheet>
-          }
+          onOpenRadio={() => void ipc.windows.openWeatherRadio({ location: active })}
+          radioEnabled={config?.weatherRadioEnabled}
         />
       </div>
 

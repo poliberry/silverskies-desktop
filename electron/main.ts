@@ -149,6 +149,7 @@ const WINDOW_DEFAULTS: Record<WindowRole, { width: number; height: number; minWi
   alert: { width: 440, height: 600, minWidth: 360, minHeight: 400 },
   auditLog: { width: 420, height: 700, minWidth: 340, minHeight: 420 },
   browser: { width: 1100, height: 800, minWidth: 500, minHeight: 400 },
+  weatherRadio: { width: 360, height: 460, minWidth: 320, minHeight: 380 },
 };
 
 // Fallback height (in CSS px) used for the "browser" role's embedded
@@ -380,8 +381,10 @@ async function saveSessionSnapshot() {
     // Alert windows are transient token-handoff popups — restoring them
     // on relaunch would mean restoring a payload that's already gone.
     // Browser windows are equally transient (just a page someone opened to
-    // look something up) and aren't worth restoring either.
-    if (tracked.role === "alert" || tracked.role === "browser") continue;
+    // look something up) and aren't worth restoring either. The weather
+    // radio window is a singleton utility panel with no per-instance state
+    // worth restoring — reopened from the toolbar each launch instead.
+    if (tracked.role === "alert" || tracked.role === "browser" || tracked.role === "weatherRadio") continue;
     if (tracked.win.isDestroyed()) continue;
     const b = tracked.win.getBounds();
     entries.push({
@@ -681,6 +684,22 @@ function registerWindowIpcHandlers() {
     createAppWindow({ role: "browser", browserUrl: opts.url, browserTitle: opts.title });
   });
 
+  // A singleton utility window — only ever one at a time, always paired to
+  // the "main" sentinel instanceId so it picks up Shell's own active
+  // location the same way the primary conditions/audit-log windows do (see
+  // Shell.tsx's `ipc.windows.sendInstanceLocation("main", ...)`), rather
+  // than needing its own instanceId/pairing scheme.
+  ipcMain.handle("windows:openWeatherRadio", (_event, opts: { location?: WindowLocation | null } = {}) => {
+    const existing = [...windows.values()].find((t) => t.role === "weatherRadio");
+    if (existing) {
+      if (existing.win.isMinimized()) existing.win.restore();
+      existing.win.show();
+      existing.win.focus();
+      return;
+    }
+    createAppWindow({ role: "weatherRadio", pairedInstanceId: "main", location: opts.location ?? null });
+  });
+
   function getBrowserView(event: Electron.IpcMainInvokeEvent): WebContentsView | undefined {
     const win = BrowserWindow.fromWebContents(event.sender);
     return win ? windows.get(win.id)?.browserView : undefined;
@@ -862,7 +881,13 @@ app.whenReady().then(async () => {
   // them (the snapshot itself is left alone, in case they flip back).
   if (config.uiMode === "advanced") {
     for (const entry of savedSession.windows) {
-      if (entry.role === "main" || entry.role === "alert" || entry.role === "browser") continue;
+      if (
+        entry.role === "main" ||
+        entry.role === "alert" ||
+        entry.role === "browser" ||
+        entry.role === "weatherRadio"
+      )
+        continue;
       const win = createAppWindow({
         role: entry.role,
         instanceId: entry.instanceId,

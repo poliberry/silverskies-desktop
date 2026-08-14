@@ -84,19 +84,28 @@ export interface NearestNwrFeed {
   distanceKm: number;
 }
 
-/** Finds the closest confirmed-live NWR relay to a given point, out of the
- * ~120 transmitters noaaweatherradio.org's directory currently lists as
- * actually streaming (out of ~1400 total transmitters nationwide — most
- * don't have a volunteer relay at all, so "nearest" can occasionally still
- * be quite far away, especially outside the contiguous US). Returns null
- * only if the directory itself is unreachable or empty. */
-export async function findNearestLiveNwrFeed(lat: number, lon: number): Promise<NearestNwrFeed | null> {
+/** Ranks every confirmed-live NWR relay by distance to a given point,
+ * nearest first — out of the ~120 transmitters noaaweatherradio.org's
+ * directory currently lists as actually streaming (out of ~1400 total
+ * transmitters nationwide — most don't have a volunteer relay at all, so
+ * "nearest" can occasionally still be quite far away, especially outside
+ * the contiguous US). Volunteer-run relays do sometimes go offline without
+ * the directory itself being updated (confirmed: a feed listed "ON" 404ing
+ * in practice), so callers doing actual playback should fall back through
+ * this list on failure rather than trusting only the single nearest
+ * result — see useNwrFeedCandidates. */
+export async function findLiveNwrFeedsNear(lat: number, lon: number, limit = 5): Promise<NearestNwrFeed[]> {
   const feeds = await fetchNwrDirectory();
-  if (feeds.length === 0) return null;
-  let best: NearestNwrFeed | null = null;
-  for (const feed of feeds) {
-    const distanceKm = haversineKm(lat, lon, feed.lat, feed.lon);
-    if (!best || distanceKm < best.distanceKm) best = { feed, distanceKm };
-  }
-  return best;
+  return feeds
+    .map((feed): NearestNwrFeed => ({ feed, distanceKm: haversineKm(lat, lon, feed.lat, feed.lon) }))
+    .sort((a, b) => a.distanceKm - b.distanceKm)
+    .slice(0, limit);
+}
+
+/** The single nearest confirmed-live feed — used for the Settings preview
+ * text, where a fallback chain isn't relevant. Returns null only if the
+ * directory itself is unreachable or empty. */
+export async function findNearestLiveNwrFeed(lat: number, lon: number): Promise<NearestNwrFeed | null> {
+  const ranked = await findLiveNwrFeedsNear(lat, lon, 1);
+  return ranked[0] ?? null;
 }

@@ -115,6 +115,8 @@ const api = {
     isPrimaryAuditLogOpen: (): Promise<boolean> => ipcRenderer.invoke("windows:isPrimaryAuditLogOpen"),
     openBrowser: (opts: { url: string; title?: string }): Promise<void> =>
       ipcRenderer.invoke("windows:openBrowser", opts),
+    openWeatherRadio: (opts?: { location?: WindowLocation | null }): Promise<void> =>
+      ipcRenderer.invoke("windows:openWeatherRadio", opts ?? {}),
   },
   // Controls for the sandboxed WebContentsView a "browser" role window
   // embeds (see electron/main.ts's attachBrowserContentView) — the

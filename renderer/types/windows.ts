@@ -5,7 +5,7 @@
 /** A window's "kind" — every non-main window carries its own independent
  * radar/conditions/audit-log state. "alert" windows are transient (token
  * handoff only) and are never persisted/restored across launches. */
-export type WindowRole = "main" | "radar" | "conditions" | "alert" | "auditLog" | "browser";
+export type WindowRole = "main" | "radar" | "conditions" | "alert" | "auditLog" | "browser" | "weatherRadio";
 
 export interface WindowLocation {
   lat: number;
