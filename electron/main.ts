@@ -742,17 +742,23 @@ function registerWindowIpcHandlers() {
 
   // Fire-and-forget: a radar window (or the main window, under the "main"
   // sentinel instanceId — see Shell.tsx) announces its own active location
-  // whenever it changes (search, saved-location pick). Relayed only to that
-  // instance's paired Conditions/auditLog windows, if any are open, and
-  // recorded on the sender's own tracked entry so session.json restores it
-  // to the right place too.
+  // whenever it changes (search, saved-location pick). Relayed to that
+  // instance's paired Conditions/auditLog/weatherRadio windows, if any are
+  // open (weatherRadio is always paired to "main" — see
+  // windows:openWeatherRadio — so its "Auto" nearest-feed lookup tracks
+  // Shell's own active location instead of staying pinned to whatever it
+  // was when the window opened), and recorded on the sender's own tracked
+  // entry so session.json restores it to the right place too.
   ipcMain.on("windows:instanceLocationChanged", (event, instanceId: string, location: WindowLocation) => {
     const sender = BrowserWindow.fromWebContents(event.sender);
     const senderTracked = sender ? windows.get(sender.id) : undefined;
     if (senderTracked) senderTracked.location = location;
 
     for (const tracked of windows.values()) {
-      if ((tracked.role === "conditions" || tracked.role === "auditLog") && tracked.pairedInstanceId === instanceId) {
+      if (
+        (tracked.role === "conditions" || tracked.role === "auditLog" || tracked.role === "weatherRadio") &&
+        tracked.pairedInstanceId === instanceId
+      ) {
         tracked.location = location;
         tracked.win.webContents.send("windows:instanceLocation", location);
       }

@@ -172,8 +172,21 @@ export function CustomAudioPlayer({ candidates }: CustomAudioPlayerProps) {
     const el = audioRef.current;
     if (!el) return;
     if (status === "error") {
-      setCandidateIndex(0);
-      setStatus("connecting");
+      if (candidateIndex !== 0) {
+        // Changes current?.url, which the swap effect above reacts to.
+        setCandidateIndex(0);
+        setStatus("connecting");
+      } else if (current) {
+        // Already at index 0 — setCandidateIndex(0) would be a no-op and
+        // that effect would never re-fire, silently doing nothing for a
+        // single-candidate (manual URL) retry. Reload directly instead.
+        setStatus("connecting");
+        el.src = current.url;
+        el.load();
+        void el.play().catch(() => {
+          /* autoplay can be blocked until a user gesture — the play button still works */
+        });
+      }
       return;
     }
     if (el.paused) void el.play();
