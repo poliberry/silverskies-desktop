@@ -189,6 +189,9 @@ function AlertsBoundsController({
       setDragCurrent(map.mouseEventToLatLng(e));
     }
     function onUp(e: MouseEvent) {
+      // Only the left button release ends the drag it started — releasing
+      // some other button mid-drag (left still held) shouldn't finalize it.
+      if (e.button !== 0) return;
       map.dragging.enable();
       const end = map.mouseEventToLatLng(e);
       const bounds = L.latLngBounds(dragStart!, end);
@@ -215,7 +218,10 @@ function AlertsBoundsController({
       setViewportBbox(boundsToBBox(map.getBounds()).map((v) => Math.round(v * 20) / 20) as BBox);
     },
     mousedown: (e) => {
-      if (!e.originalEvent.shiftKey) return;
+      // button 0 = left — a shift+right/middle-drag shouldn't start a
+      // selection (or disable panning) at all; those buttons don't pan the
+      // map on their own either.
+      if (!e.originalEvent.shiftKey || e.originalEvent.button !== 0) return;
       map.dragging.disable();
       setSelection(null);
       setDragStart(e.latlng);
