@@ -436,9 +436,14 @@ function registerUserAgentHeader() {
  * CORS the same way a browser tab would — this patches the *response*
  * headers for just that host so the browser-side fetch is allowed to read
  * the result, the same trick used for LibreWXR/NWS/etc. isn't needed
- * (those already send permissive CORS headers). */
+ * (those already send permissive CORS headers). noaaweatherradio.org's
+ * public NWR transmitter directory (see lib/weather-radio/nwr-directory.ts)
+ * has the exact same gap — confirmed via a direct header check, no
+ * Access-Control-Allow-Origin at all — while the wxradio.org stream hosts
+ * that directory actually points at already send `Access-Control-Allow-
+ * Origin: *` themselves, so only the directory host needs this. */
 function registerCorsWorkarounds() {
-  const corsHosts = ["api.willyweather.com.au"];
+  const corsHosts = ["api.willyweather.com.au", "noaaweatherradio.org"];
   session.defaultSession.webRequest.onHeadersReceived(
     { urls: corsHosts.map((h) => `https://${h}/*`) },
     (details, callback) => {
