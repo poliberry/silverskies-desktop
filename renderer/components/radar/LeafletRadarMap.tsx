@@ -121,7 +121,10 @@ const MIN_SELECTION_DRAG_PX = 8;
  * plain click (no shift) or the Escape key clears an active selection; so
  * does a fresh shift-drag (replacing it) or the active location changing
  * (an old box drawn over a previous search shouldn't keep silently
- * filtering the log after a new one). */
+ * filtering the log after a new one). The synthetic click the browser fires
+ * right after the drag's mouseup is swallowed (see suppressNextClickRef
+ * below) so ending a drag over an alert/SPC-outlook polygon doesn't also
+ * pop that layer's own tooltip open. */
 function AlertsBoundsController({
   lat,
   lon,
@@ -136,6 +139,15 @@ function AlertsBoundsController({
   const [selection, setSelection] = useState<L.LatLngBounds | null>(null);
   const [dragStart, setDragStart] = useState<L.LatLng | null>(null);
   const [dragCurrent, setDragCurrent] = useState<L.LatLng | null>(null);
+  // The browser fires a synthetic "click" right after every mouseup,
+  // completely independent of our own map-level mousedown/mouseup handling
+  // above — for a shift-drag that ends over an alert/SPC-outlook polygon,
+  // that click otherwise bubbles straight to *that layer's own* click
+  // listener (bound directly to its path element, not through anything
+  // here) and pops its tooltip open as an unwanted side effect of finishing
+  // a selection. A ref, not state — this only needs to flag exactly the one
+  // click event that follows a real mouseup; it doesn't drive any render.
+  const suppressNextClickRef = useRef(false);
 
   // Also cancels any drag still in progress and re-enables map.dragging —
   // without that, a location change mid-drag (search, saved-location click,
@@ -199,6 +211,11 @@ function AlertsBoundsController({
       const ne = map.latLngToContainerPoint(bounds.getNorthEast());
       setDragStart(null);
       setDragCurrent(null);
+      // Swallow the click this mouseup is about to trigger (see the
+      // capture-phase listener below) — even a below-threshold shift+click
+      // (no real drag) still shouldn't fall through to whatever's
+      // underneath and pop its tooltip open.
+      suppressNextClickRef.current = true;
       // A shift+click with no real drag shouldn't "select" a zero-size box.
       if (Math.abs(sw.x - ne.x) < MIN_SELECTION_DRAG_PX || Math.abs(sw.y - ne.y) < MIN_SELECTION_DRAG_PX) return;
       setSelection(bounds);
@@ -210,6 +227,30 @@ function AlertsBoundsController({
       document.removeEventListener("mouseup", onUp);
     };
   }, [map, dragStart]);
+
+  // Intercepts that one synthetic click during the capture phase — before
+  // it can descend to a polygon's own path element and fire that layer's
+  // bubble-phase click listener (or bubble back up to Leaflet's own
+  // container-level click handling, which is what powers this component's
+  // `click` handler below) — so it never reaches anything at all. Attached
+  // once, independent of drag state, since the click always arrives *after*
+  // onUp has already cleared dragStart.
+  //
+  // On `document`, not `map.getContainer()` — the same "released outside the
+  // map" case onMove/onUp above already handle means this click can land
+  // anywhere in the document too, not just inside the map. A container-
+  // scoped listener would never see (and never clear) the flag for such a
+  // click, permanently stuck `true` and swallowing the next unrelated click
+  // that happens to land back inside the map.
+  useEffect(() => {
+    function onClickCapture(e: MouseEvent) {
+      if (!suppressNextClickRef.current) return;
+      suppressNextClickRef.current = false;
+      e.stopPropagation();
+    }
+    document.addEventListener("click", onClickCapture, true);
+    return () => document.removeEventListener("click", onClickCapture, true);
+  }, []);
 
   useMapEvents({
     moveend: () => {
