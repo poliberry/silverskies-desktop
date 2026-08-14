@@ -128,6 +128,16 @@ export function RadarWindowToolbar({
         >
           <i className="ph ph-cloud-sun" aria-hidden="true" style={{ fontSize: "0.9rem" }} />
         </button>
+        <button
+          type="button"
+          disabled={!location}
+          onClick={() => location && void ipc.windows.openAuditLog({ instanceId, location })}
+          title="Open an audit-log window tracking this radar's location"
+          aria-label="Open audit log window"
+          style={{ ...iconBtnStyle, opacity: location ? 1 : 0.4, cursor: location ? "pointer" : "not-allowed" }}
+        >
+          <i className="ph ph-list-magnifying-glass" aria-hidden="true" style={{ fontSize: "0.9rem" }} />
+        </button>
       </div>
 
       <WindowControlButtons iconSize={11} />

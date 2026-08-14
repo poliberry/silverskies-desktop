@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import { Shell } from "@/components/layout/Shell";
 import { RadarWindow } from "@/components/radar-window/RadarWindow";
 import { ConditionsWindow } from "@/components/conditions-window/ConditionsWindow";
+import { AuditLogWindow } from "@/components/audit-log-window/AuditLogWindow";
 import { AlertWindow } from "@/components/alert-window/AlertWindow";
 import type { WindowLocation } from "@/types/windows";
 
-type ParsedRole = "main" | "radar" | "conditions" | "alert";
+type ParsedRole = "main" | "radar" | "conditions" | "alert" | "auditLog";
 
 interface ParsedWindowParams {
   role: ParsedRole;
@@ -21,7 +22,9 @@ function parseWindowParams(): ParsedWindowParams {
   const params = new URLSearchParams(window.location.search);
   const rawRole = params.get("window");
   const role: ParsedRole =
-    rawRole === "radar" || rawRole === "conditions" || rawRole === "alert" ? rawRole : "main";
+    rawRole === "radar" || rawRole === "conditions" || rawRole === "alert" || rawRole === "auditLog"
+      ? rawRole
+      : "main";
   const lat = params.get("lat");
   const lon = params.get("lon");
   const label = params.get("label");
@@ -60,6 +63,10 @@ export function WindowRouter() {
     case "conditions":
       return (
         <ConditionsWindow instanceId={params.pairedInstanceId ?? ""} initialLocation={params.location} />
+      );
+    case "auditLog":
+      return (
+        <AuditLogWindow instanceId={params.pairedInstanceId ?? ""} initialLocation={params.location} />
       );
     case "alert":
       return <AlertWindow token={params.token ?? ""} />;

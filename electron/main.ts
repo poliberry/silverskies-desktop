@@ -57,6 +57,10 @@ const windows = new Map<number, TrackedWindow>();
 // radar — as opposed to an independent "New Radar Window" instance. When
 // this one closes, Shell redocks. Only ever one at a time.
 let primaryPopoutWindowId: number | null = null;
+// Same idea, independently tracked, for the single auditLog pop-out (if
+// any) that undocked the *main* window's own audit log — paired to the
+// "main" sentinel instanceId rather than a real radar instance.
+let primaryAuditLogPopoutWindowId: number | null = null;
 // Short-lived handoff for "open this alert in its own window" — keyed by a
 // one-time token so the alert's full text never has to round-trip through a
 // URL query string. Entries are deleted as soon as they're read, with a
@@ -125,6 +129,7 @@ const WINDOW_DEFAULTS: Record<WindowRole, { width: number; height: number; minWi
   radar: { width: 1200, height: 800, minWidth: 700, minHeight: 500 },
   conditions: { width: 380, height: 820, minWidth: 320, minHeight: 480 },
   alert: { width: 440, height: 600, minWidth: 360, minHeight: 400 },
+  auditLog: { width: 420, height: 700, minWidth: 340, minHeight: 420 },
 };
 
 interface CreateAppWindowOptions {
@@ -213,6 +218,10 @@ function createAppWindow(opts: CreateAppWindowOptions): BrowserWindow {
       primaryPopoutWindowId = null;
       broadcastToAll("windows:primaryRadarClosed");
     }
+    if (win.id === primaryAuditLogPopoutWindowId) {
+      primaryAuditLogPopoutWindowId = null;
+      broadcastToAll("windows:primaryAuditLogClosed");
+    }
     scheduleSessionSave();
   });
 
@@ -251,7 +260,8 @@ async function saveSessionSnapshot() {
       role: tracked.role,
       instanceId: tracked.instanceId,
       pairedInstanceId: tracked.pairedInstanceId,
-      isPrimaryPopout: tracked.win.id === primaryPopoutWindowId,
+      isPrimaryPopout:
+        tracked.win.id === primaryPopoutWindowId || tracked.win.id === primaryAuditLogPopoutWindowId,
       location: tracked.location ?? null,
       bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
     });
@@ -474,6 +484,31 @@ function registerWindowIpcHandlers() {
     },
   );
 
+  ipcMain.handle(
+    "windows:openAuditLog",
+    (
+      _event,
+      opts: { instanceId: string; location?: WindowLocation | null; isPrimaryPopout?: boolean },
+    ) => {
+      const existing = [...windows.values()].find(
+        (t) => t.role === "auditLog" && t.pairedInstanceId === opts.instanceId,
+      );
+      if (existing) {
+        if (existing.win.isMinimized()) existing.win.restore();
+        existing.win.show();
+        existing.win.focus();
+        return;
+      }
+      const win = createAppWindow({
+        role: "auditLog",
+        instanceId: randomUUID(),
+        pairedInstanceId: opts.instanceId,
+        location: opts.location ?? null,
+      });
+      if (opts.isPrimaryPopout) primaryAuditLogPopoutWindowId = win.id;
+    },
+  );
+
   ipcMain.handle("windows:openAlert", (_event, alert: unknown) => {
     const token = randomUUID();
     pendingAlertPayloads.set(token, alert);
@@ -493,9 +528,10 @@ function registerWindowIpcHandlers() {
     return pendingAlertPayloads.get(token) ?? null;
   });
 
-  // Fire-and-forget: a radar window announces its own active location
+  // Fire-and-forget: a radar window (or the main window, under the "main"
+  // sentinel instanceId — see Shell.tsx) announces its own active location
   // whenever it changes (search, saved-location pick). Relayed only to that
-  // instance's paired Conditions window, if one happens to be open, and
+  // instance's paired Conditions/auditLog windows, if any are open, and
   // recorded on the sender's own tracked entry so session.json restores it
   // to the right place too.
   ipcMain.on("windows:instanceLocationChanged", (event, instanceId: string, location: WindowLocation) => {
@@ -504,7 +540,7 @@ function registerWindowIpcHandlers() {
     if (senderTracked) senderTracked.location = location;
 
     for (const tracked of windows.values()) {
-      if (tracked.role === "conditions" && tracked.pairedInstanceId === instanceId) {
+      if ((tracked.role === "conditions" || tracked.role === "auditLog") && tracked.pairedInstanceId === instanceId) {
         tracked.location = location;
         tracked.win.webContents.send("windows:instanceLocation", location);
       }
@@ -517,6 +553,10 @@ function registerWindowIpcHandlers() {
   // resets on a reload/relaunch, but the actual pop-out window (tracked
   // here in the registry) doesn't, so this is the source of truth.
   ipcMain.handle("windows:isPrimaryRadarOpen", () => primaryPopoutWindowId !== null);
+
+  // Same purpose as windows:isPrimaryRadarOpen above, for the main window's
+  // own poppable audit log.
+  ipcMain.handle("windows:isPrimaryAuditLogOpen", () => primaryAuditLogPopoutWindowId !== null);
 }
 
 // The renderer only hears about *future* status changes once it subscribes
@@ -613,9 +653,13 @@ app.whenReady().then(async () => {
       // Restores the "undocked" relationship too, not just the window
       // itself — otherwise a relaunch (or the main window merely reloading,
       // which re-mounts Shell with fresh React state) would show the main
-      // window's radar as docked again even though its pop-out is still/
-      // already open. See windows:isPrimaryRadarOpen below.
-      if (entry.isPrimaryPopout) primaryPopoutWindowId = win.id;
+      // window's radar/audit-log as docked again even though its pop-out is
+      // still/already open. See windows:isPrimaryRadarOpen/
+      // windows:isPrimaryAuditLogOpen below.
+      if (entry.isPrimaryPopout) {
+        if (entry.role === "radar") primaryPopoutWindowId = win.id;
+        else if (entry.role === "auditLog") primaryAuditLogPopoutWindowId = win.id;
+      }
     }
   }
 

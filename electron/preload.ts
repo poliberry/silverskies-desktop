@@ -55,6 +55,11 @@ const api = {
     }): Promise<void> => ipcRenderer.invoke("windows:openRadar", opts ?? {}),
     openConditions: (opts: { instanceId: string; location?: WindowLocation | null }): Promise<void> =>
       ipcRenderer.invoke("windows:openConditions", opts),
+    openAuditLog: (opts: {
+      instanceId: string;
+      location?: WindowLocation | null;
+      isPrimaryPopout?: boolean;
+    }): Promise<void> => ipcRenderer.invoke("windows:openAuditLog", opts),
     // `alert` is an opaque, JSON-serializable payload (a NormalizedAlert on
     // the renderer side) — the main process just stashes it in memory and
     // hands it back once to whichever window asks for this token, so it
@@ -84,6 +89,13 @@ const api = {
     // undocked (a pop-out window survived a main-window reload, or was
     // restored from session.json on relaunch) instead of assuming docked.
     isPrimaryRadarOpen: (): Promise<boolean> => ipcRenderer.invoke("windows:isPrimaryRadarOpen"),
+    // Same pair, for the main window's own poppable audit log.
+    onPrimaryAuditLogClosed: (callback: () => void): (() => void) => {
+      const listener = () => callback();
+      ipcRenderer.on("windows:primaryAuditLogClosed", listener);
+      return () => ipcRenderer.removeListener("windows:primaryAuditLogClosed", listener);
+    },
+    isPrimaryAuditLogOpen: (): Promise<boolean> => ipcRenderer.invoke("windows:isPrimaryAuditLogOpen"),
   },
   // Every window is frameless and draws its own titlebar (drag region +
   // these three buttons) — see WindowControlButtons.tsx on the renderer

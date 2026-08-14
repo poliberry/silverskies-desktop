@@ -39,12 +39,19 @@ export interface SilverSkiesApi {
       isPrimaryPopout?: boolean;
     }): Promise<void>;
     openConditions(opts: { instanceId: string; location?: WindowLocation | null }): Promise<void>;
+    openAuditLog(opts: {
+      instanceId: string;
+      location?: WindowLocation | null;
+      isPrimaryPopout?: boolean;
+    }): Promise<void>;
     openAlert(alert: NormalizedAlert): Promise<void>;
     getAlertPayload(token: string): Promise<NormalizedAlert | null>;
     sendInstanceLocation(instanceId: string, location: WindowLocation): void;
     onInstanceLocation(callback: (location: WindowLocation) => void): () => void;
     onPrimaryRadarClosed(callback: () => void): () => void;
     isPrimaryRadarOpen(): Promise<boolean>;
+    onPrimaryAuditLogClosed(callback: () => void): () => void;
+    isPrimaryAuditLogOpen(): Promise<boolean>;
   };
   windowControls: {
     minimize(): Promise<void>;

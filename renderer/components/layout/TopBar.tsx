@@ -16,11 +16,14 @@ export interface TopBarProps {
   onSetUnit: (u: UnitPref) => void;
   timezone: string | undefined;
   timeFormat: TimeFormatPref;
-  /** Only shown when Settings → Interface is set to "Advanced". */
-  showRadarWindowActions?: boolean;
+  /** Only shown when Settings → Interface is set to "Advanced" — gates both
+   * the radar and audit-log pop-out affordances below. */
+  showWindowActions?: boolean;
   radarPoppedOut?: boolean;
   onPopOutRadar?: () => void;
   onNewRadarWindow?: () => void;
+  auditLogPoppedOut?: boolean;
+  onPopOutAuditLog?: () => void;
 }
 
 export function TopBar({
@@ -33,10 +36,12 @@ export function TopBar({
   onSetUnit,
   timezone,
   timeFormat,
-  showRadarWindowActions,
+  showWindowActions,
   radarPoppedOut,
   onPopOutRadar,
   onNewRadarWindow,
+  auditLogPoppedOut,
+  onPopOutAuditLog,
 }: TopBarProps) {
   const clock = useClock(timezone, timeFormat);
 
@@ -70,7 +75,7 @@ export function TopBar({
           </span>
           {clock}
         </span>
-        {showRadarWindowActions && (
+        {showWindowActions && (
           <div className="unit-toggle">
             {!radarPoppedOut && (
               <button
@@ -89,6 +94,18 @@ export function TopBar({
               aria-label="New radar window"
             >
               <i className="ph ph-plus-square" aria-hidden="true" />
+            </button>
+          </div>
+        )}
+        {showWindowActions && !auditLogPoppedOut && (
+          <div className="unit-toggle">
+            <button
+              className="unit-btn"
+              onClick={onPopOutAuditLog}
+              title="Undock the audit log into its own window"
+              aria-label="Pop out audit log"
+            >
+              <i className="ph ph-arrow-square-out" aria-hidden="true" />
             </button>
           </div>
         )}
