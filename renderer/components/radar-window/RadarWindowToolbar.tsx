@@ -138,6 +138,16 @@ export function RadarWindowToolbar({
         >
           <i className="ph ph-list-magnifying-glass" aria-hidden="true" style={{ fontSize: "0.9rem" }} />
         </button>
+        <button
+          type="button"
+          disabled={!location}
+          onClick={() => location && void ipc.windows.openWeatherRadio({ instanceId, location })}
+          title="Open a weather radio window tracking this radar's location"
+          aria-label="Open weather radio window"
+          style={{ ...iconBtnStyle, opacity: location ? 1 : 0.4, cursor: location ? "pointer" : "not-allowed" }}
+        >
+          <i className="ph ph-radio" aria-hidden="true" style={{ fontSize: "0.9rem" }} />
+        </button>
       </div>
 
       <WindowControlButtons iconSize={11} />

@@ -392,7 +392,7 @@ export function Shell() {
           onPopOutRadar={handlePopOutRadar}
           onNewRadarWindow={handleNewRadarWindow}
           onLogoClick={handleLogoClick}
-          onOpenRadio={() => void ipc.windows.openWeatherRadio({ location: active })}
+          onOpenRadio={() => void ipc.windows.openWeatherRadio({ instanceId: "main", location: active })}
           radioEnabled={config?.weatherRadioEnabled}
         />
       </div>

@@ -624,6 +624,31 @@ function openOrShowAuditLogWindow(opts: {
   return win;
 }
 
+/** Same idea as openOrShowConditionsWindow/openOrShowAuditLogWindow above,
+ * for the weather-radio role — one per instanceId (the main window under
+ * the "main" sentinel, or any independent radar instance's own real
+ * instanceId), so its "Auto" nearest-public-feed lookup (see
+ * lib/weather-radio/nwr-directory.ts) tracks whichever location it's
+ * actually paired to, the same location-relay rules every other paired
+ * window already follows (windows:instanceLocationChanged below). */
+function openOrShowWeatherRadioWindow(opts: { instanceId: string; location?: WindowLocation | null }): BrowserWindow {
+  const existing = [...windows.values()].find(
+    (t) => t.role === "weatherRadio" && t.pairedInstanceId === opts.instanceId,
+  );
+  if (existing) {
+    if (existing.win.isMinimized()) existing.win.restore();
+    existing.win.show();
+    existing.win.focus();
+    return existing.win;
+  }
+  return createAppWindow({
+    role: "weatherRadio",
+    instanceId: randomUUID(),
+    pairedInstanceId: opts.instanceId,
+    location: opts.location ?? null,
+  });
+}
+
 function registerWindowIpcHandlers() {
   ipcMain.handle(
     "windows:openRadar",
@@ -684,21 +709,16 @@ function registerWindowIpcHandlers() {
     createAppWindow({ role: "browser", browserUrl: opts.url, browserTitle: opts.title });
   });
 
-  // A singleton utility window — only ever one at a time, always paired to
-  // the "main" sentinel instanceId so it picks up Shell's own active
-  // location the same way the primary conditions/audit-log windows do (see
-  // Shell.tsx's `ipc.windows.sendInstanceLocation("main", ...)`), rather
-  // than needing its own instanceId/pairing scheme.
-  ipcMain.handle("windows:openWeatherRadio", (_event, opts: { location?: WindowLocation | null } = {}) => {
-    const existing = [...windows.values()].find((t) => t.role === "weatherRadio");
-    if (existing) {
-      if (existing.win.isMinimized()) existing.win.restore();
-      existing.win.show();
-      existing.win.focus();
-      return;
-    }
-    createAppWindow({ role: "weatherRadio", pairedInstanceId: "main", location: opts.location ?? null });
-  });
+  // One per instanceId — the main window opens its own under the "main"
+  // sentinel (Shell.tsx), and any independent radar window opens its own
+  // under that radar's real instanceId, exactly like openConditions/
+  // openAuditLog above.
+  ipcMain.handle(
+    "windows:openWeatherRadio",
+    (_event, opts: { instanceId: string; location?: WindowLocation | null }) => {
+      openOrShowWeatherRadioWindow(opts);
+    },
+  );
 
   function getBrowserView(event: Electron.IpcMainInvokeEvent): WebContentsView | undefined {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -743,12 +763,14 @@ function registerWindowIpcHandlers() {
   // Fire-and-forget: a radar window (or the main window, under the "main"
   // sentinel instanceId — see Shell.tsx) announces its own active location
   // whenever it changes (search, saved-location pick). Relayed to that
-  // instance's paired Conditions/auditLog/weatherRadio windows, if any are
-  // open (weatherRadio is always paired to "main" — see
-  // windows:openWeatherRadio — so its "Auto" nearest-feed lookup tracks
-  // Shell's own active location instead of staying pinned to whatever it
-  // was when the window opened), and recorded on the sender's own tracked
-  // entry so session.json restores it to the right place too.
+  // instance's paired conditions/auditLog/weatherRadio windows, if any are
+  // open — a weatherRadio window can be paired to any of these (opened from
+  // Shell under "main", or from an independent RadarWindow under its own
+  // real instanceId — see windows:openWeatherRadio), so its "Auto"
+  // nearest-feed lookup always tracks whichever location it's actually
+  // paired to instead of staying pinned to whatever it was when the window
+  // opened. Also recorded on the sender's own tracked entry so
+  // session.json restores it to the right place too.
   ipcMain.on("windows:instanceLocationChanged", (event, instanceId: string, location: WindowLocation) => {
     const sender = BrowserWindow.fromWebContents(event.sender);
     const senderTracked = sender ? windows.get(sender.id) : undefined;

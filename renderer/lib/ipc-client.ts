@@ -205,7 +205,7 @@ export const ipc = {
       if (!window.silverSkies) { warnNoBridge(); return; }
       return window.silverSkies.windows.openBrowser(opts);
     },
-    async openWeatherRadio(opts?: { location?: WindowLocation | null }): Promise<void> {
+    async openWeatherRadio(opts: { instanceId: string; location?: WindowLocation | null }): Promise<void> {
       if (!window.silverSkies) { warnNoBridge(); return; }
       return window.silverSkies.windows.openWeatherRadio(opts);
     },
