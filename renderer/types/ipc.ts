@@ -1,6 +1,6 @@
 import type { ConfigFile, LocationsFile, SavedLocation } from "./settings";
 import type { AppInfo, UpdaterStatus } from "./updater";
-import type { WindowLocation } from "./windows";
+import type { MapViewBounds, WindowLocation } from "./windows";
 import type { NormalizedAlert } from "./alerts";
 
 // Mirrors the shape contextBridge.exposeInMainWorld("silverSkies", ...)
@@ -48,6 +48,8 @@ export interface SilverSkiesApi {
     getAlertPayload(token: string): Promise<NormalizedAlert | null>;
     sendInstanceLocation(instanceId: string, location: WindowLocation): void;
     onInstanceLocation(callback: (location: WindowLocation) => void): () => void;
+    sendInstanceBounds(instanceId: string, bounds: MapViewBounds): void;
+    onInstanceBounds(callback: (bounds: MapViewBounds) => void): () => void;
     onPrimaryRadarClosed(callback: () => void): () => void;
     isPrimaryRadarOpen(): Promise<boolean>;
     onPrimaryAuditLogClosed(callback: () => void): () => void;

@@ -13,6 +13,7 @@ import { useSavedLocations } from "@/hooks/useSavedLocations";
 import { useSettings } from "@/hooks/useSettings";
 import { useWeather } from "@/hooks/useWeather";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useAlertsForBounds } from "@/hooks/useAlertsForBounds";
 import { useSpcOutlook } from "@/hooks/useSpcOutlook";
 import { useRadarSettings } from "@/hooks/useRadarSettings";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
@@ -30,6 +31,7 @@ import { buildTodayOutlook } from "@/lib/forecast-outlook";
 import { ProviderConfigError } from "@/lib/providers";
 import type { NormalizedAlert } from "@/types/alerts";
 import type { UnitPref } from "@/types/settings";
+import type { BBox } from "@/lib/alerts/librewxr";
 
 export function Shell() {
   const { config, updateConfig } = useSettings();
@@ -38,7 +40,23 @@ export function Shell() {
     useActiveLocation();
 
   const weatherQuery = useWeather(active);
+  // Point-based, for the active/searched location — drives the severe-pulse
+  // glow, favicon, and taskbar badge below, all of which are meant to track
+  // "the location I'm looking at," not wherever the radar map happens to be
+  // panned to at the moment. The audit log itself uses a separate,
+  // bbox-based query (see radarBounds/boundsAlertsQuery below) so panning
+  // the radar around doesn't also make the whole window pulse for whatever
+  // happens to be on screen.
   const alertsQuery = useAlerts(active?.lat ?? null, active?.lon ?? null);
+  // The docked radar's own current viewport (or its active shift-drag
+  // selection), reported by RadarMap's onBoundsChange below — or, when the
+  // radar is popped out instead, relayed here over IPC under the "main"
+  // sentinel from that pop-out's own RadarWindow (see RadarWindow.tsx's
+  // boundsInstanceId). Feeds the audit log so it always reflects whatever's
+  // actually visible on "the radar," docked or not.
+  const [radarBounds, setRadarBounds] = useState<BBox | null>(null);
+  useEffect(() => ipc.windows.onInstanceBounds(setRadarBounds), []);
+  const boundsAlertsQuery = useAlertsForBounds(radarBounds);
   const spcOutlookEnabled = config?.spcOutlookEnabled ?? true;
   const spcOutlookQuery = useSpcOutlook(spcOutlookEnabled);
   // The main window's own docked radar instance — a pop-out radar window
@@ -255,8 +273,9 @@ export function Shell() {
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: "var(--bg)" }}>
       {/* Only the main window gets the animated gradient sweep — pop-out
           radar/conditions/alert windows render their own root component
-          instead of Shell, so they never pick this up. */}
-      <div id="top-glow" />
+          instead of Shell, so they never pick this up. Settings → General →
+          "Top Glow Sweep" can also turn it off entirely. */}
+      {(config?.topGlowEnabled ?? true) && <div id="top-glow" />}
       <div style={{ padding: "12px 12px 0" }}>
         <TopBar
           locationLabel={active?.label ?? "—"}
@@ -270,6 +289,7 @@ export function Shell() {
           onRefresh={() => {
             void weatherQuery.refetch();
             void alertsQuery.refetch();
+            void boundsAlertsQuery.refetch();
           }}
           unit={unit}
           onSetUnit={(u) => updateConfig({ units: u })}
@@ -322,6 +342,7 @@ export function Shell() {
                   preloadLocations={savedLocations}
                   spcOutlookEnabled={spcOutlookEnabled}
                   settings={radarSettings}
+                  onBoundsChange={setRadarBounds}
                 />
               )}
             </div>
@@ -331,8 +352,8 @@ export function Shell() {
           {auditLogPoppedOut === false && (
             <div className="glass-card min-h-0 p-3" style={{ flex: radarPoppedOut === false ? "1 1 0%" : "1 1 100%" }}>
               <AlertLog
-                alerts={alertsQuery.data ?? []}
-                isLoading={alertsQuery.isLoading}
+                alerts={boundsAlertsQuery.data ?? []}
+                isLoading={boundsAlertsQuery.isLoading}
                 demoAlerts={demoAlerts}
                 todayOutlook={todayOutlook}
                 spcOutlook={spcOutlook}

@@ -18,6 +18,11 @@ import type { WindowLocation } from "@/types/windows";
 export interface RadarWindowProps {
   instanceId: string;
   initialLocation: WindowLocation | null;
+  /** True only for the single pop-out that undocks the main window's own
+   * radar — see CreateAppWindowOptions.isPrimaryPopout in electron/main.ts.
+   * Changes nothing about this window's own behavior; only which sentinel
+   * its map-bounds relay uses (see boundsInstanceId below). */
+  isPrimaryPopout?: boolean;
 }
 
 /**
@@ -28,8 +33,15 @@ export interface RadarWindowProps {
  * any other radar window, by design — "New Radar Window" always opens one
  * of these from scratch.
  */
-export function RadarWindow({ instanceId, initialLocation }: RadarWindowProps) {
+export function RadarWindow({ instanceId, initialLocation, isPrimaryPopout }: RadarWindowProps) {
   const [location, setLocation] = useState<WindowLocation | null>(initialLocation);
+  // Bounds are relayed separately from location (see sendInstanceBounds) —
+  // the primary pop-out uses the "main" sentinel here so its viewport reaches
+  // the main window's own audit-log pairing, while its own real instanceId
+  // keeps driving location exactly as it already does (see the
+  // isPrimaryPopout comment on RadarWindowProps for why these two are
+  // deliberately kept separate).
+  const boundsInstanceId = isPrimaryPopout ? "main" : instanceId;
   const [isLocating, setIsLocating] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const settings = useRadarSettings();
@@ -137,6 +149,7 @@ export function RadarWindow({ instanceId, initialLocation }: RadarWindowProps) {
             spcOutlookEnabled={spcOutlookEnabled}
             settings={settings}
             renderSettingsInline={false}
+            onBoundsChange={(bbox) => ipc.windows.sendInstanceBounds(boundsInstanceId, bbox)}
           />
         )}
       </div>

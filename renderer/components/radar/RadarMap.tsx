@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { RadarSettings } from "@/hooks/useRadarSettings";
+import type { BBox } from "@/lib/alerts/librewxr";
 
 // Leaflet touches `window` at module scope, so it can only ever run in the
 // browser — dynamic-import it with ssr disabled from this Client Component
@@ -38,6 +39,11 @@ export interface RadarMapProps {
    * rendering RadarSettingsDropdowns — the under-map bar then shows only
    * playback controls instead of duplicating them. Defaults to true. */
   renderSettingsInline?: boolean;
+  /** Fires with whatever bbox should currently drive this radar instance's
+   * audit log: the map's own viewport, or a user's shift-drag selection
+   * within it when one is active. Called on mount, on pan/zoom, and whenever
+   * a selection is drawn or cleared. */
+  onBoundsChange?: (bbox: BBox) => void;
 }
 
 export function RadarMap(props: RadarMapProps) {

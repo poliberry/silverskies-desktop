@@ -6,6 +6,7 @@ import { autoUpdater } from "electron-updater";
 import { configStore, locationsStore, sessionStore } from "./store";
 import type {
   AppInfo,
+  MapViewBounds,
   SavedLocation,
   SessionWindowEntry,
   UpdaterStatus,
@@ -141,6 +142,13 @@ interface CreateAppWindowOptions {
   /** Only for role "alert" — the one-time token the alert window reads back
    * out of its own launch URL to fetch its payload. */
   alertToken?: string;
+  /** Only for role "radar" — true for the single pop-out that undocks the
+   * main window's own radar. Threaded into the launch URL so RadarWindow can
+   * relay its map bounds under the "main" sentinel (the same one the main
+   * window's own audit-log pairing already uses) instead of this window's
+   * own real instanceId — bounds-only, deliberately not touching how its
+   * location is relayed (see registerWindowIpcHandlers' bounds relay). */
+  isPrimaryPopout?: boolean;
 }
 
 /** Generalized replacement for the old single-purpose createWindow() — every
@@ -191,6 +199,7 @@ function createAppWindow(opts: CreateAppWindowOptions): BrowserWindow {
     query.set("label", opts.location.label);
   }
   if (opts.alertToken) query.set("token", opts.alertToken);
+  if (opts.isPrimaryPopout) query.set("isPrimaryPopout", "1");
 
   if (isDev) {
     const qs = query.toString();
@@ -458,7 +467,12 @@ function registerWindowIpcHandlers() {
         }
       }
       const instanceId = opts.instanceId ?? randomUUID();
-      const win = createAppWindow({ role: "radar", instanceId, location: opts.location ?? null });
+      const win = createAppWindow({
+        role: "radar",
+        instanceId,
+        location: opts.location ?? null,
+        isPrimaryPopout: opts.isPrimaryPopout,
+      });
       if (opts.isPrimaryPopout) primaryPopoutWindowId = win.id;
     },
   );
@@ -546,6 +560,26 @@ function registerWindowIpcHandlers() {
       }
     }
     scheduleSessionSave();
+  });
+
+  // Same fire-and-forget relay as instanceLocationChanged above, for a radar
+  // instance's current map viewport (or an active shift-drag selection) —
+  // powers the paired audit-log window's "alerts for what's on screen" view.
+  // Deliberately not tracked on TrackedWindow or persisted to session.json —
+  // a viewport isn't part of a window's identity the way its location is,
+  // it's just a live feed. The "main" sentinel also reaches the main window
+  // itself (not just auditLog windows paired to it) — see the isPrimaryPopout
+  // comment on CreateAppWindowOptions for why the primary radar pop-out uses
+  // this sentinel here despite using its own real instanceId for location.
+  ipcMain.on("windows:instanceBoundsChanged", (_event, instanceId: string, bounds: MapViewBounds) => {
+    for (const tracked of windows.values()) {
+      if (tracked.role === "auditLog" && tracked.pairedInstanceId === instanceId) {
+        tracked.win.webContents.send("windows:instanceBounds", bounds);
+      }
+    }
+    if (instanceId === "main") {
+      getMainWindow()?.webContents.send("windows:instanceBounds", bounds);
+    }
   });
 
   // Lets Shell initialize its "is my radar undocked?" state correctly on
@@ -649,6 +683,7 @@ app.whenReady().then(async () => {
         pairedInstanceId: entry.pairedInstanceId,
         location: entry.location ?? null,
         bounds: entry.bounds,
+        isPrimaryPopout: entry.role === "radar" ? entry.isPrimaryPopout : undefined,
       });
       // Restores the "undocked" relationship too, not just the window
       // itself — otherwise a relaunch (or the main window merely reloading,

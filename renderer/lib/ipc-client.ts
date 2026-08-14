@@ -1,6 +1,6 @@
 import type { ConfigFile, LocationsFile, SavedLocation } from "@/types/settings";
 import type { AppInfo, UpdaterStatus } from "@/types/updater";
-import type { WindowLocation } from "@/types/windows";
+import type { MapViewBounds, WindowLocation } from "@/types/windows";
 import type { NormalizedAlert } from "@/types/alerts";
 import "@/types/ipc";
 
@@ -21,6 +21,7 @@ const DEFAULT_CONFIG: ConfigFile = {
   devToolsEnabled: false,
   notificationsEnabled: true,
   spcOutlookEnabled: true,
+  topGlowEnabled: true,
   uiMode: "classic",
   alertTypeOverrides: {},
   themeId: "default",
@@ -167,6 +168,14 @@ export const ipc = {
     onInstanceLocation(callback: (location: WindowLocation) => void): () => void {
       if (!window.silverSkies) return () => {};
       return window.silverSkies.windows.onInstanceLocation(callback);
+    },
+    sendInstanceBounds(instanceId: string, bounds: MapViewBounds): void {
+      if (!window.silverSkies) return;
+      window.silverSkies.windows.sendInstanceBounds(instanceId, bounds);
+    },
+    onInstanceBounds(callback: (bounds: MapViewBounds) => void): () => void {
+      if (!window.silverSkies) return () => {};
+      return window.silverSkies.windows.onInstanceBounds(callback);
     },
     onPrimaryRadarClosed(callback: () => void): () => void {
       if (!window.silverSkies) return () => {};

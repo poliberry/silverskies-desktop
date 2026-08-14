@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, WMSTileLayer, Marker, GeoJSON, SVGOverlay, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, WMSTileLayer, Marker, GeoJSON, SVGOverlay, Rectangle, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import type { LatLngBoundsExpression } from "leaflet";
 import type { Feature, FeatureCollection } from "geojson";
@@ -104,6 +104,121 @@ function InvalidateSizeOnResize() {
     return () => observer.disconnect();
   }, [map]);
   return null;
+}
+
+const MIN_SELECTION_DRAG_PX = 8;
+
+/** Feeds the parent's `onBoundsChange` — the audit log's alerts query — with
+ * whatever bbox should currently drive it: a user's shift-drag rectangle
+ * selection when one is active, otherwise the map's own viewport. Also owns
+ * the shift+drag gesture itself and the persistent/live selection rectangle
+ * overlays.
+ *
+ * Shift+drag is repurposed from Leaflet's default `boxZoom` behavior (zoom
+ * to the dragged rectangle) — see `boxZoom={false}` on MapContainer below —
+ * so the same gesture now draws a selection instead. `map.dragging` is
+ * suspended for the duration of the drag so it doesn't also pan the map. A
+ * plain click (no shift) or the Escape key clears an active selection; so
+ * does a fresh shift-drag (replacing it) or the active location changing
+ * (an old box drawn over a previous search shouldn't keep silently
+ * filtering the log after a new one). */
+function AlertsBoundsController({
+  lat,
+  lon,
+  onBoundsChange,
+}: {
+  lat: number;
+  lon: number;
+  onBoundsChange?: (bbox: BBox) => void;
+}) {
+  const map = useMap();
+  const [viewportBbox, setViewportBbox] = useState<BBox>(() => boundsToBBox(map.getBounds()));
+  const [selection, setSelection] = useState<L.LatLngBounds | null>(null);
+  const [dragStart, setDragStart] = useState<L.LatLng | null>(null);
+  const [dragCurrent, setDragCurrent] = useState<L.LatLng | null>(null);
+
+  useEffect(() => setSelection(null), [lat, lon]);
+
+  // Escape clears an active selection (or cancels one still mid-drag)
+  // regardless of whether the map itself has focus — the same global-ish
+  // reach as the "×" close on any of this app's own dialogs.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (dragStart) {
+        map.dragging.enable();
+        setDragStart(null);
+        setDragCurrent(null);
+      }
+      setSelection(null);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [map, dragStart]);
+
+  useMapEvents({
+    moveend: () => {
+      // Round so panning by a few pixels doesn't spam refetches — same
+      // tolerance AlertPolygonsLayer's own bbox tracking uses.
+      setViewportBbox(boundsToBBox(map.getBounds()).map((v) => Math.round(v * 20) / 20) as BBox);
+    },
+    mousedown: (e) => {
+      if (!e.originalEvent.shiftKey) return;
+      map.dragging.disable();
+      setSelection(null);
+      setDragStart(e.latlng);
+      setDragCurrent(e.latlng);
+    },
+    mousemove: (e) => {
+      if (!dragStart) return;
+      setDragCurrent(e.latlng);
+    },
+    mouseup: (e) => {
+      if (!dragStart) return;
+      map.dragging.enable();
+      const bounds = L.latLngBounds(dragStart, e.latlng);
+      const sw = map.latLngToContainerPoint(bounds.getSouthWest());
+      const ne = map.latLngToContainerPoint(bounds.getNorthEast());
+      setDragStart(null);
+      setDragCurrent(null);
+      // A shift+click with no real drag shouldn't "select" a zero-size box.
+      if (Math.abs(sw.x - ne.x) < MIN_SELECTION_DRAG_PX || Math.abs(sw.y - ne.y) < MIN_SELECTION_DRAG_PX) return;
+      setSelection(bounds);
+    },
+    click: (e) => {
+      if (!e.originalEvent.shiftKey && selection) setSelection(null);
+    },
+  });
+
+  const effectiveBbox = selection ? boundsToBBox(selection) : viewportBbox;
+  useEffect(() => {
+    onBoundsChange?.(effectiveBbox);
+    // `effectiveBbox` is a fresh array/tuple every render — keying off its
+    // joined string instead avoids re-firing (and the parent state update
+    // that would trigger) on every render that doesn't actually change it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveBbox.join(",")]);
+
+  const dragBounds = dragStart && dragCurrent ? L.latLngBounds(dragStart, dragCurrent) : null;
+
+  return (
+    <>
+      {dragBounds && (
+        <Rectangle
+          bounds={dragBounds}
+          pathOptions={{ color: "#ffffff", weight: 1, dashArray: "4 4", fillOpacity: 0.08 }}
+          interactive={false}
+        />
+      )}
+      {selection && !dragBounds && (
+        <Rectangle
+          bounds={selection}
+          pathOptions={{ color: "#ffffff", weight: 1.5, dashArray: "6 4", fillOpacity: 0.05 }}
+          interactive={false}
+        />
+      )}
+    </>
+  );
 }
 
 /** Flies to a newly-selected station once (not on every re-render while it
@@ -366,6 +481,7 @@ export function LeafletRadarMap({
   spcOutlookEnabled,
   settings,
   renderSettingsInline = true,
+  onBoundsChange,
 }: RadarMapProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -530,6 +646,10 @@ export function LeafletRadarMap({
           center={[lat, lon]}
           zoom={7}
           zoomControl={false}
+          // Leaflet's default shift+drag draws a zoom-to-rectangle box —
+          // disabled so the same gesture can instead draw an alerts region
+          // selection (see AlertsBoundsController below).
+          boxZoom={false}
           className="h-full w-full"
           style={{ background: "var(--bg)" }}
           attributionControl
@@ -564,6 +684,7 @@ export function LeafletRadarMap({
           <Marker position={[lat, lon]} icon={locationIcon} />
           <RecenterOnLocationChange lat={lat} lon={lon} />
           <InvalidateSizeOnResize />
+          <AlertsBoundsController lat={lat} lon={lon} onBoundsChange={onBoundsChange} />
           {selectedStation && (
             <>
               <FlyToStation lat={selectedStation.lat} lon={selectedStation.lon} />
