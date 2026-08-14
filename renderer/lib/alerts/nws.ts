@@ -20,6 +20,10 @@ interface NwsFeature {
      * zone/county-based products (heat watches, advisories, …) never carry
      * their own polygon. Used to synthesize a polygon when geometry is missing. */
     affectedZones?: string[];
+    /** Grab-bag of CAP parameters NWS attaches to every alert — VTEC is the
+     * one we care about (office/phenomena/significance/event-number/valid
+     * period), used to link out to IEM's VTEC event browser. */
+    parameters?: { VTEC?: string[] };
   };
 }
 
@@ -55,6 +59,7 @@ export async function fetchNwsAlerts(lat: number, lon: number): Promise<Normaliz
         url: f.id,
         geometry: f.geometry,
         affectedZones: p.affectedZones,
+        vtec: p.parameters?.VTEC?.[0],
       };
     });
   } catch {

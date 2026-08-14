@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
@@ -14,9 +14,77 @@ import {
 import type { AlertSource, NormalizedAlert } from "@/types/alerts";
 import type { TodayOutlook } from "@/lib/forecast-outlook";
 import type { SpcOutlookFeature } from "@/lib/alerts/spc-outlook";
+import { alertClass, hazardGroupKey } from "@/lib/alerts/classify";
+import { DEMO_ALERT_GROUPS } from "@/lib/alerts/demo";
+import { Accordion, AccordionItem, AccordionHeader, AccordionTrigger, AccordionPanel } from "@/components/ui/accordion";
 import { AlertRow } from "./AlertRow";
 import { TodayOutlookRow } from "./TodayOutlookRow";
 import { SpcOutlookBanner } from "./SpcOutlookBanner";
+
+// hazardGroupKey -> clean canonical label, built from the same demo-event
+// catalog Settings -> Alerts draws from — each demo event is already a
+// clean, single-hazard name, so reverse-mapping through hazardGroupKey
+// gives a distinct label per *hazard*, not per shared cssClass (several
+// genuinely different hazards — e.g. "Excessive Heat Warning" and "Extreme
+// Wind Warning" — intentionally share the "alert-extreme" cssClass for
+// styling, so a cssClass-keyed label lookup would show the wrong hazard's
+// name for one of them once grouping stopped merging them together).
+const GROUP_LABEL_BY_KEY: Record<string, string> = (() => {
+  const labels: Record<string, string> = {};
+  for (const group of DEMO_ALERT_GROUPS) {
+    for (const { event, severity } of group.options) {
+      const key = hazardGroupKey(event, alertClass(event, severity, event, ""));
+      if (!(key in labels)) labels[key] = event;
+    }
+  }
+  return labels;
+})();
+
+interface AlertGroup {
+  /** Stable group identity (see groupAlertsByEvent) — used as the React/
+   * accordion key, not shown to the user. */
+  groupKey: string;
+  /** The clean canonical label for this hazard type, shown as the group's
+   * header — falls back to the first-seen member's displayEvent only for a
+   * hazard the demo catalog doesn't reach. */
+  displayEvent: string;
+  alerts: NormalizedAlert[];
+}
+
+/** Groups alerts belonging to the same hazard type — e.g. every alert with
+ * "Flash Flood Warning" somewhere in its name, whether that's a clean NWS
+ * `displayEvent` like "Flash Flood Warning" or a source (WMO/librewxr) that
+ * only gives a full sentence like "Flash Flood Warning issued for XYZ County
+ * until 5pm" — into one collapsible section.
+ *
+ * Keyed via hazardGroupKey(), not `cssClass` or `displayEvent` directly:
+ * cssClass matches hazard phrases via regex (`.test(event)`, i.e.
+ * "contains", not "equals") against the raw event text, which is exactly
+ * the "contains this phrase" grouping wanted here — but several distinct
+ * hazards intentionally share one cssClass for styling, so grouping on the
+ * class itself would merge unrelated hazards (see hazardGroupKey's own
+ * doc). Grouping on the plain displayEvent string, meanwhile, would only
+ * work for sources whose event field is already just the clean hazard
+ * name, which not all of them are. */
+function groupAlertsByEvent(alerts: NormalizedAlert[]): AlertGroup[] {
+  const groups: AlertGroup[] = [];
+  const index = new Map<string, AlertGroup>();
+  for (const alert of alerts) {
+    const key = hazardGroupKey(alert.event, alert.cssClass);
+    let group = index.get(key);
+    if (!group) {
+      group = {
+        groupKey: key,
+        displayEvent: GROUP_LABEL_BY_KEY[key] ?? alert.displayEvent,
+        alerts: [],
+      };
+      index.set(key, group);
+      groups.push(group);
+    }
+    group.alerts.push(alert);
+  }
+  return groups;
+}
 
 const SEVERITIES = ["Extreme", "Severe", "Moderate", "Minor"] as const;
 const SOURCE_LABEL: Record<AlertSource, string> = {
@@ -63,6 +131,22 @@ export function AlertLog({
     return true;
   });
 
+  const groups = useMemo(() => groupAlertsByEvent(filtered), [filtered]);
+
+  // Every group starts open (today's behavior shows every alert immediately)
+  // — a ref tracks which group keys we've already seen so a group a user
+  // manually collapsed doesn't get forced back open just because some other
+  // alert in the list changed, while a brand-new event type still opens by
+  // default instead of appearing collapsed.
+  const seenGroupKeys = useRef<Set<string>>(new Set());
+  const [openGroups, setOpenGroups] = useState<string[]>([]);
+  useEffect(() => {
+    const newKeys = groups.map((g) => g.groupKey).filter((k) => !seenGroupKeys.current.has(k));
+    if (newKeys.length === 0) return;
+    newKeys.forEach((k) => seenGroupKeys.current.add(k));
+    setOpenGroups((prev) => [...prev, ...newKeys]);
+  }, [groups]);
+
   function toggle<T>(set: Set<T>, value: T, setter: (s: Set<T>) => void) {
     const next = new Set(set);
     if (next.has(value)) next.delete(value);
@@ -73,7 +157,10 @@ export function AlertLog({
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-3 px-1">
-        <div className="section-title">Audit Log</div>
+        <div className="section-title">
+          Audit Log
+          {filtered.length > 0 && <span className="section-title-count"> ({filtered.length})</span>}
+        </div>
         <div className="section-line" />
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -140,9 +227,26 @@ export function AlertLog({
           {!isLoading && filtered.length === 0 && (
             <div className="geo-notice">No active alerts for this area right now.</div>
           )}
-          {filtered.map((alert) => (
-            <AlertRow key={alert.id} alert={alert} />
-          ))}
+          {groups.length > 0 && (
+            <Accordion multiple value={openGroups} onValueChange={(v) => setOpenGroups(v as string[])}>
+              {groups.map((group) => (
+                <AccordionItem key={group.groupKey} value={group.groupKey}>
+                  <AccordionHeader>
+                    <AccordionTrigger className="alert-group-trigger">
+                      <i className="ph ph-caret-right alert-group-caret" aria-hidden="true" />
+                      <span className="alert-group-title">{group.displayEvent}</span>
+                      <span className="alert-group-count">{group.alerts.length}</span>
+                    </AccordionTrigger>
+                  </AccordionHeader>
+                  <AccordionPanel className="flex flex-col gap-1">
+                    {group.alerts.map((alert) => (
+                      <AlertRow key={alert.id} alert={alert} />
+                    ))}
+                  </AccordionPanel>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          )}
         </div>
       </ScrollArea>
     </div>

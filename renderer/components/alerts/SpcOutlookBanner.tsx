@@ -78,7 +78,7 @@ export function SpcOutlookBanner({ outlook }: { outlook: SpcOutlookFeature }) {
               href={SOURCE_URL}
               onClick={(e) => {
                 e.preventDefault();
-                void ipc.app.openExternal(SOURCE_URL);
+                void ipc.windows.openBrowser({ url: SOURCE_URL, title: "SPC Day 1 Outlook" });
               }}
             >
               SOURCE ↗

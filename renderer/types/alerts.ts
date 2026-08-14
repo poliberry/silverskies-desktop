@@ -32,4 +32,9 @@ export interface NormalizedAlert {
   /** Zone-boundary API URLs — see nws.ts. Used to synthesize a polygon for
    * zone-based products whose `geometry` comes back null. */
   affectedZones?: string[];
+  /** Raw VTEC string (e.g. "/O.NEW.KOUN.SV.W.0045.240101T0000Z-240101T0100Z/")
+   * — NWS-specific, absent for every other source. Lets the in-app browser
+   * open the alert on IEM's VTEC event browser instead of the raw CAP API
+   * URL in `url` — see lib/browser/external-links.ts's iemAlertUrl. */
+  vtec?: string;
 }

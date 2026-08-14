@@ -17,8 +17,10 @@ import { AboutPanel } from "./AboutPanel";
 import { DevToolsPanel } from "./DevToolsPanel";
 import { AlertTypesPanel } from "./AlertTypesPanel";
 import { ThemesPanel } from "./ThemesPanel";
+import { WeatherRadioPanel } from "./WeatherRadioPanel";
 import type { NormalizedAlert } from "@/types/alerts";
 import type { ThemePref, TimeFormatPref, UiModePref, UnitPref, WeatherProviderId } from "@/types/settings";
+import type { WindowLocation } from "@/types/windows";
 
 const REFRESH_OPTIONS = [
   { label: "5M", value: 5 },
@@ -36,6 +38,9 @@ export interface SettingsDialogProps {
   onDemoAlertsChange: (alerts: NormalizedAlert[]) => void;
   onTriggerAsteroid: () => void;
   asteroidActive: boolean;
+  /** The active location — threaded through to WeatherRadioPanel for its
+   * "Auto" live-feed preview. */
+  activeLocation: WindowLocation | null;
 }
 
 export function SettingsDialog({
@@ -43,6 +48,7 @@ export function SettingsDialog({
   onDemoAlertsChange,
   onTriggerAsteroid,
   asteroidActive,
+  activeLocation,
 }: SettingsDialogProps) {
   const { config, updateConfig } = useSettings();
   const [apiKeyDraft, setApiKeyDraft] = useState("");
@@ -85,6 +91,9 @@ export function SettingsDialog({
             </TabsTrigger>
             <TabsTrigger value="alerts" className={TAB_TRIGGER_CLASS}>
               Alerts
+            </TabsTrigger>
+            <TabsTrigger value="radio" className={TAB_TRIGGER_CLASS}>
+              Radio
             </TabsTrigger>
             <TabsTrigger value="themes" className={TAB_TRIGGER_CLASS}>
               Themes
@@ -330,6 +339,10 @@ export function SettingsDialog({
 
           <TabsContent value="alerts" className="pt-4">
             <AlertTypesPanel />
+          </TabsContent>
+
+          <TabsContent value="radio" className="pt-4">
+            <WeatherRadioPanel location={activeLocation} />
           </TabsContent>
 
           <TabsContent value="themes" className="pt-4">

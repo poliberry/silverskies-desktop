@@ -36,6 +36,10 @@ export interface RadarSettings {
    * visual noise for anyone who just wants the base radar. */
   showRadarStations: boolean;
   toggleRadarStations: () => void;
+  /** METAR/ASOS wind-speed-and-direction barbs across the visible map —
+   * default off for the same visual-noise reason as showRadarStations. */
+  showWindBarbs: boolean;
+  toggleWindBarbs: () => void;
 }
 
 export function useRadarSettings(): RadarSettings {
@@ -48,6 +52,7 @@ export function useRadarSettings(): RadarSettings {
   const [showPrecipOverlay, setShowPrecipOverlay] = useState(false);
   const [showAqiOverlay, setShowAqiOverlay] = useState(false);
   const [showRadarStations, setShowRadarStations] = useState(false);
+  const [showWindBarbs, setShowWindBarbs] = useState(false);
 
   return {
     colorScheme,
@@ -68,5 +73,7 @@ export function useRadarSettings(): RadarSettings {
     toggleAqiOverlay: () => setShowAqiOverlay((v) => !v),
     showRadarStations,
     toggleRadarStations: () => setShowRadarStations((v) => !v),
+    showWindBarbs,
+    toggleWindBarbs: () => setShowWindBarbs((v) => !v),
   };
 }

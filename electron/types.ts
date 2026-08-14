@@ -60,6 +60,14 @@ export interface ConfigFile {
   themeId: string;
   /** The user's last loaded/pasted custom theme JSON. */
   customTheme: ThemeDefinition | null;
+  /** NWS weather radio easter feature — see renderer/lib/weather-radio. */
+  weatherRadioEnabled: boolean;
+  /** "simulated" synthesizes the SAME attention tone + reads the alert aloud
+   * via speech synthesis; "live" plays a user-supplied audio stream while
+   * attempting to decode real SAME tones from it. */
+  weatherRadioMode: "simulated" | "live";
+  weatherRadioLiveFeedMode: "auto" | "manual";
+  weatherRadioLiveStreamUrl: string | null;
 }
 
 export interface ThemeColors {
@@ -84,7 +92,7 @@ export interface ThemeDefinition {
  * own independent radar/conditions/audit-log state (see electron/main.ts's
  * window registry). "alert" windows are transient (token handoff only) and
  * are never persisted to SessionFile. */
-export type WindowRole = "main" | "radar" | "conditions" | "alert" | "auditLog";
+export type WindowRole = "main" | "radar" | "conditions" | "alert" | "auditLog" | "browser" | "weatherRadio";
 
 export interface WindowLocation {
   lat: number;
@@ -175,4 +183,8 @@ export const DEFAULT_CONFIG: ConfigFile = {
   alertTypeOverrides: {},
   themeId: "default",
   customTheme: null,
+  weatherRadioEnabled: false,
+  weatherRadioMode: "simulated",
+  weatherRadioLiveFeedMode: "auto",
+  weatherRadioLiveStreamUrl: null,
 };

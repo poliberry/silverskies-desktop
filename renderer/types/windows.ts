@@ -5,7 +5,7 @@
 /** A window's "kind" — every non-main window carries its own independent
  * radar/conditions/audit-log state. "alert" windows are transient (token
  * handoff only) and are never persisted/restored across launches. */
-export type WindowRole = "main" | "radar" | "conditions" | "alert" | "auditLog";
+export type WindowRole = "main" | "radar" | "conditions" | "alert" | "auditLog" | "browser" | "weatherRadio";
 
 export interface WindowLocation {
   lat: number;
@@ -67,4 +67,20 @@ export interface OpenAuditLogWindowOptions {
   /** True only for the single pop-out that undocks the main window's own
    * audit log — Shell listens for this specific instance closing to redock. */
   isPrimaryPopout?: boolean;
+}
+
+export interface OpenBrowserWindowOptions {
+  url: string;
+  title?: string;
+}
+
+/** Pushed from the main process whenever the embedded page in a "browser"
+ * role window navigates, finishes loading, or changes title — see
+ * electron/main.ts's attachBrowserContentView. */
+export interface BrowserWindowState {
+  url: string;
+  title: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  isLoading: boolean;
 }

@@ -213,6 +213,11 @@ body {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+.icon-spin { animation: spin 0.8s linear infinite; display: inline-block; }
+.live-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: #ff3b3b; animation: pulse 1.4s ease-in-out infinite;
+}
 @keyframes floatIcon {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
@@ -430,6 +435,25 @@ body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
   background: none; border: none; color: var(--ac, #888); opacity: 0.7; cursor: pointer; transition: opacity 0.15s;
 }
 .alert-line-popout:hover { opacity: 1; }
+
+.section-title-count { color: var(--text3); letter-spacing: 0.1em; }
+
+/* ── Alert grouping accordion — one collapsible section per displayEvent,
+   header styled to match .alert-line's mono/uppercase list aesthetic
+   instead of the generic Base UI accordion look. */
+.alert-group-trigger {
+  display: flex; align-items: center; width: 100%; gap: 6px; padding: 4px 1px; margin: 0;
+  border: none; background: none; font: inherit; font-family: var(--mono); font-size: 0.72rem;
+  letter-spacing: 0.12em; text-transform: uppercase; text-align: left; color: var(--text3); cursor: pointer;
+}
+.alert-group-trigger:hover { color: var(--text2); }
+.alert-group-caret { font-size: 0.7rem; flex-shrink: 0; transition: transform 0.15s; }
+.alert-group-trigger[data-panel-open] .alert-group-caret { transform: rotate(90deg); }
+.alert-group-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alert-group-count {
+  flex-shrink: 0; font-size: 0.68rem; opacity: 0.75; background: var(--border); border-radius: 999px;
+  padding: 1px 7px;
+}
 
 /* Per-product / severity color tiers via --ac — full taxonomy ported
    from the original app; see lib/alerts/classify.ts for the JS side. */

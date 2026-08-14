@@ -24,7 +24,10 @@ import { useFavicon } from "@/hooks/useFavicon";
 import { useTaskbarBadge } from "@/hooks/useTaskbarBadge";
 import { useAsteroid } from "@/hooks/useAsteroid";
 import { useLocationWatcher } from "@/hooks/useLocationWatcher";
+import { useLogoClickCounter } from "@/hooks/useLogoClickCounter";
+import { useWeatherRadio } from "@/hooks/useWeatherRadio";
 import { AsteroidCountdown } from "@/components/easter-eggs/AsteroidCountdown";
+import { AsteroidShooterGame } from "@/components/easter-eggs/AsteroidShooterGame";
 import { activeSeverePulseColor } from "@/lib/alerts/merge";
 import { findOutlookAtPoint } from "@/lib/alerts/spc-outlook";
 import { buildTodayOutlook } from "@/lib/forecast-outlook";
@@ -174,6 +177,33 @@ export function Shell() {
     }
   }, [isAdvancedUi]);
   const [demoAlerts, setDemoAlerts] = useState<NormalizedAlert[]>([]);
+
+  // 2% chance, rolled once per mount — see the root div's background below.
+  const [cowBackgroundActive] = useState(() => Math.random() < 0.02);
+
+  // Logo-click asteroid *shooter* easter egg — distinct from the
+  // useAsteroid "Asteroid Impact Warning" demo-alert countdown below, which
+  // is an unrelated existing easter egg that just happens to share the name.
+  const [showAsteroidGame, setShowAsteroidGame] = useState(false);
+  const handleLogoClick = useLogoClickCounter(() => setShowAsteroidGame(true));
+
+  // NWS weather radio — watches the active location's alerts plus whatever
+  // the radar's currently showing on screen (deduped by id) for new arrivals
+  // to announce; see useWeatherRadio for the simulated tone+speech pipeline
+  // itself (live mode's audio comes from a real stream instead, played from
+  // the standalone Weather Radio pop-up window — see onOpenRadio below).
+  const radioAlertIds = new Set<string>();
+  const radioAlerts = [...(alertsQuery.data ?? []), ...(boundsAlertsQuery.data ?? [])].filter((a) => {
+    if (radioAlertIds.has(a.id)) return false;
+    radioAlertIds.add(a.id);
+    return true;
+  });
+  useWeatherRadio({
+    enabled: config?.weatherRadioEnabled ?? false,
+    mode: config?.weatherRadioMode ?? "simulated",
+    alerts: radioAlerts,
+  });
+
   // The asteroid easter egg forces a specific pulse color directly rather
   // than deriving one from alert classification (it isn't a real hazard
   // class) — this takes priority over whatever the real/demo alerts imply.
@@ -300,7 +330,28 @@ export function Shell() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden" style={{ background: "var(--bg)" }}>
+    <div
+      className="relative flex h-screen flex-col overflow-hidden"
+      style={
+        cowBackgroundActive
+          ? {
+              backgroundImage: "url(/easter-eggs/cow-background.jpg)",
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }
+          : { background: "var(--bg)" }
+      }
+    >
+      {/* A 1-in-50 easter egg — a scrim over the cow photo (rather than
+          touching every panel's own background/opacity) keeps every existing
+          glass-card/panel reading exactly the same as normal on top of it. */}
+      {cowBackgroundActive && (
+        <div
+          aria-hidden="true"
+          style={{ position: "absolute", inset: 0, background: "var(--bg)", opacity: 0.6, zIndex: 0, pointerEvents: "none" }}
+        />
+      )}
+      {showAsteroidGame && <AsteroidShooterGame onClose={() => setShowAsteroidGame(false)} />}
       {/* Only the main window gets the animated gradient sweep — pop-out
           radar/conditions/alert windows render their own root component
           instead of Shell, so they never pick this up. Settings → General →
@@ -340,6 +391,9 @@ export function Shell() {
           radarPoppedOut={radarPoppedOut === true}
           onPopOutRadar={handlePopOutRadar}
           onNewRadarWindow={handleNewRadarWindow}
+          onLogoClick={handleLogoClick}
+          onOpenRadio={() => void ipc.windows.openWeatherRadio({ location: active })}
+          radioEnabled={config?.weatherRadioEnabled}
         />
       </div>
 
@@ -361,11 +415,12 @@ export function Shell() {
               onDemoAlertsChange={setDemoAlerts}
               onTriggerAsteroid={asteroid.trigger}
               asteroidActive={asteroid.isActive}
+              activeLocation={active}
             />
           }
         />
 
-        <div className="flex min-h-0 flex-col gap-4">
+        <div className="flex min-h-0 min-w-0 flex-col gap-4">
           {/* Strictly `=== false`, not `!radarPoppedOut`/`!auditLogPoppedOut`
               — while either is still `null` (state not yet confirmed with
               main), rendering nothing here is what avoids briefly mounting a
@@ -391,7 +446,7 @@ export function Shell() {
           {/* Popping either one out frees the whole column for whichever
               panel is still docked, instead of splitting it 2:1. */}
           {auditLogPoppedOut === false && (
-            <div className="glass-card min-h-0 p-3" style={{ flex: radarPoppedOut === false ? "1 1 0%" : "1 1 100%" }}>
+            <div className="glass-card min-h-0 min-w-0 p-3" style={{ flex: radarPoppedOut === false ? "1 1 0%" : "1 1 100%" }}>
               <AlertLog
                 alerts={boundsAlertsQuery.data ?? []}
                 isLoading={boundsAlertsQuery.isLoading}
