@@ -56,6 +56,22 @@ export function Shell() {
   // actually visible on "the radar," docked or not.
   const [radarBounds, setRadarBounds] = useState<BBox | null>(null);
   useEffect(() => ipc.windows.onInstanceBounds(setRadarBounds), []);
+  // Covers the case where the primary radar was already popped out (and had
+  // already reported its own bbox) before Shell (re)mounted — a reload, or a
+  // pop-out restored from session.json on relaunch — so onInstanceBounds'
+  // live-only relay alone would leave this at null until the next pan/zoom.
+  // When the radar is docked instead, RadarMap's own onBoundsChange below
+  // reports its bbox directly on mount, so this is a harmless no-op there.
+  useEffect(() => {
+    let cancelled = false;
+    void ipc.windows.getInstanceBounds("main").then((cached) => {
+      if (cancelled || !cached) return;
+      setRadarBounds((current) => current ?? cached);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const boundsAlertsQuery = useAlertsForBounds(radarBounds);
   const spcOutlookEnabled = config?.spcOutlookEnabled ?? true;
   const spcOutlookQuery = useSpcOutlook(spcOutlookEnabled);
@@ -274,8 +290,14 @@ export function Shell() {
       {/* Only the main window gets the animated gradient sweep — pop-out
           radar/conditions/alert windows render their own root component
           instead of Shell, so they never pick this up. Settings → General →
-          "Top Glow Sweep" can also turn it off entirely. */}
-      {(config?.topGlowEnabled ?? true) && <div id="top-glow" />}
+          "Top Glow Sweep" hides it via CSS instead of conditionally
+          rendering it — useSeverePulse imperatively sets this element's
+          "pulsing" class/--tg color from its own effect, which only reruns
+          when the pulse color/theme change, not when this setting does; if
+          the div were unmounted while disabled, re-enabling it mid-alert
+          would remount a fresh element with neither, silently dropping the
+          pulse until the color happened to change again. */}
+      <div id="top-glow" className={config?.topGlowEnabled ?? true ? undefined : "top-glow-disabled"} />
       <div style={{ padding: "12px 12px 0" }}>
         <TopBar
           locationLabel={active?.label ?? "—"}
@@ -289,7 +311,12 @@ export function Shell() {
           onRefresh={() => {
             void weatherQuery.refetch();
             void alertsQuery.refetch();
-            void boundsAlertsQuery.refetch();
+            // react-query's refetch() runs the queryFn even when `enabled`
+            // is false — useAlertsForBounds' queryFn indexes straight into
+            // the bbox tuple, so calling this before the radar has ever
+            // reported bounds would throw on a null bbox instead of just
+            // no-op'ing like the `enabled` guard implies.
+            if (radarBounds) void boundsAlertsQuery.refetch();
           }}
           unit={unit}
           onSetUnit={(u) => updateConfig({ units: u })}

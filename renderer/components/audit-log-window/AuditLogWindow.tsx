@@ -36,7 +36,7 @@ export interface AuditLogWindowProps {
  * receiving it over IPC, the same way ConditionsWindow independently calls
  * useWeather() instead of Shell handing it props.
  */
-export function AuditLogWindow({ initialLocation }: AuditLogWindowProps) {
+export function AuditLogWindow({ instanceId, initialLocation }: AuditLogWindowProps) {
   const [location, setLocation] = useState<WindowLocation | null>(initialLocation);
   // The paired radar instance's current viewport (or its active shift-drag
   // selection) — see sendInstanceBounds/onInstanceBounds. Independent of
@@ -52,6 +52,24 @@ export function AuditLogWindow({ initialLocation }: AuditLogWindowProps) {
 
   useEffect(() => ipc.windows.onInstanceLocation(setLocation), []);
   useEffect(() => ipc.windows.onInstanceBounds(setBounds), []);
+  // onInstanceBounds only ever delivers *future* updates — the paired radar
+  // normally reports its own bbox as soon as its map mounts, which is before
+  // this window is opened, so without this catch-up call `bounds` would sit
+  // at null (and the alert list empty) until the user next pans/zooms it.
+  useEffect(() => {
+    let cancelled = false;
+    void ipc.windows.getInstanceBounds(instanceId).then((cached) => {
+      if (cancelled || !cached) return;
+      // Functional form, not a bare setBounds(cached) — a live
+      // onInstanceBounds push (a real pan/zoom) can land while this request
+      // is still in flight, and that's always more current than whatever
+      // was cached when the request was made.
+      setBounds((current) => current ?? cached);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [instanceId]);
 
   useDocumentTitle(location ? `${location.label} - Audit Log - Silver Skies` : "Audit Log - Silver Skies");
 

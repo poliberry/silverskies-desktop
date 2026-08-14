@@ -89,6 +89,11 @@ const api = {
       ipcRenderer.on("windows:instanceBounds", listener);
       return () => ipcRenderer.removeListener("windows:instanceBounds", listener);
     },
+    // Catches a newly (re)mounted window up on whatever bbox its paired
+    // radar instance already reported before it existed — onInstanceBounds
+    // above only ever delivers *future* updates.
+    getInstanceBounds: (instanceId: string): Promise<MapViewBounds | null> =>
+      ipcRenderer.invoke("windows:getInstanceBounds", instanceId),
     // Fires when the one radar window that undocked the main window's own
     // radar (opened via openRadar({isPrimaryPopout:true})) closes, so Shell
     // knows to redock.

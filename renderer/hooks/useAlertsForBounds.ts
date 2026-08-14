@@ -5,6 +5,21 @@ import { fetchMergedAlerts, dedupeKey, SEVERITY_RANK } from "@/lib/alerts/merge"
 import { useSettings } from "./useSettings";
 import type { NormalizedAlert } from "@/types/alerts";
 
+/** Leaflet's own bounds aren't wrapped to ±180 — a viewport panned across
+ * the antimeridian can hand back e.g. west=170, east=200 instead of
+ * east=-160. Averaging those *raw* values first is what makes the
+ * wraparound center come out right (170 & 200 average to 185, the true
+ * center of that span); wrapping each end into ±180 independently before
+ * averaging would give a nonsense center on the wrong side of the world
+ * instead. So this only ever wraps the *final* center value — see its one
+ * call site below. */
+function normalizeLon(lon: number): number {
+  let l = lon % 360;
+  if (l > 180) l -= 360;
+  if (l < -180) l += 360;
+  return l;
+}
+
 /** Merged alert feed for a map viewport (or a user-drawn selection within
  * one) instead of a single point — powers the audit log's "show what's on
  * the radar" view. Same three-source merge AlertPolygonsLayer already uses
@@ -26,7 +41,16 @@ export function useAlertsForBounds(bbox: BBox | null) {
     queryFn: async () => {
       const box = bbox as BBox;
       const centerLat = (box[1] + box[3]) / 2;
-      const centerLon = (box[0] + box[2]) / 2;
+      // fetchMergedAlerts does point-in-coverage-range checks on this value
+      // (inNwsCoverage etc.) and builds its own buffer bbox around it — an
+      // out-of-range raw average (e.g. 190) fails every coverage check and
+      // produces a degenerate fallback bbox, silently missing whatever's
+      // actually visible in a wrapped viewport. The two bbox-native fetchers
+      // below still get the raw box unchanged; they already clamp it
+      // themselves (see librewxr.ts's clampBBox) with the same accepted
+      // "lose a sliver of coverage at the antimeridian" tradeoff as
+      // AlertPolygonsLayer's identical query.
+      const centerLon = normalizeLon((box[0] + box[2]) / 2);
 
       const results = await Promise.allSettled([
         fetchLibreWxrAlerts(libreWxrHost, box),

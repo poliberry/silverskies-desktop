@@ -156,6 +156,40 @@ function AlertsBoundsController({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [map, dragStart]);
 
+  // Tracks the rest of an in-progress drag on `document` rather than via
+  // Leaflet's own map-scoped mousemove/mouseup events — those only fire
+  // while the pointer stays over the map element, so releasing outside it
+  // (dragging off the edge of the window, say) would otherwise never reach
+  // a mouseup handler at all, permanently leaving map.dragging disabled with
+  // no way to pan short of Escape. A native listener on `document` fires
+  // regardless of where the pointer ends up, and map.mouseEventToLatLng
+  // projects it back to a map coordinate the same way Leaflet's own event
+  // would have. Only attached while a drag is actually in progress.
+  useEffect(() => {
+    if (!dragStart) return;
+    function onMove(e: MouseEvent) {
+      setDragCurrent(map.mouseEventToLatLng(e));
+    }
+    function onUp(e: MouseEvent) {
+      map.dragging.enable();
+      const end = map.mouseEventToLatLng(e);
+      const bounds = L.latLngBounds(dragStart!, end);
+      const sw = map.latLngToContainerPoint(bounds.getSouthWest());
+      const ne = map.latLngToContainerPoint(bounds.getNorthEast());
+      setDragStart(null);
+      setDragCurrent(null);
+      // A shift+click with no real drag shouldn't "select" a zero-size box.
+      if (Math.abs(sw.x - ne.x) < MIN_SELECTION_DRAG_PX || Math.abs(sw.y - ne.y) < MIN_SELECTION_DRAG_PX) return;
+      setSelection(bounds);
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [map, dragStart]);
+
   useMapEvents({
     moveend: () => {
       // Round so panning by a few pixels doesn't spam refetches — same
@@ -168,22 +202,6 @@ function AlertsBoundsController({
       setSelection(null);
       setDragStart(e.latlng);
       setDragCurrent(e.latlng);
-    },
-    mousemove: (e) => {
-      if (!dragStart) return;
-      setDragCurrent(e.latlng);
-    },
-    mouseup: (e) => {
-      if (!dragStart) return;
-      map.dragging.enable();
-      const bounds = L.latLngBounds(dragStart, e.latlng);
-      const sw = map.latLngToContainerPoint(bounds.getSouthWest());
-      const ne = map.latLngToContainerPoint(bounds.getNorthEast());
-      setDragStart(null);
-      setDragCurrent(null);
-      // A shift+click with no real drag shouldn't "select" a zero-size box.
-      if (Math.abs(sw.x - ne.x) < MIN_SELECTION_DRAG_PX || Math.abs(sw.y - ne.y) < MIN_SELECTION_DRAG_PX) return;
-      setSelection(bounds);
     },
     click: (e) => {
       if (!e.originalEvent.shiftKey && selection) setSelection(null);

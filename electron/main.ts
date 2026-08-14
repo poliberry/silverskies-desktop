@@ -67,6 +67,15 @@ let primaryAuditLogPopoutWindowId: number | null = null;
 // URL query string. Entries are deleted as soon as they're read, with a
 // timeout as a backstop in case the window is closed before it asks.
 const pendingAlertPayloads = new Map<string, unknown>();
+// The last bounds reported for each radar instance (or the "main" sentinel)
+// — see windows:instanceBoundsChanged. A radar reports its bbox as soon as
+// its map mounts, which is normally *before* its paired audit-log window
+// (if any) is opened, so the live relay below alone would never reach a
+// window that didn't exist yet; windows:getInstanceBounds lets a newly
+// (re)mounted audit-log window ask for what it missed instead of sitting at
+// `bounds === null` until the next pan/zoom. Not part of TrackedWindow/
+// session.json — same reasoning as bounds not being persisted there.
+const latestBoundsByInstance = new Map<string, MapViewBounds>();
 
 function getMainWindow(): BrowserWindow | null {
   for (const tracked of windows.values()) {
@@ -572,6 +581,7 @@ function registerWindowIpcHandlers() {
   // comment on CreateAppWindowOptions for why the primary radar pop-out uses
   // this sentinel here despite using its own real instanceId for location.
   ipcMain.on("windows:instanceBoundsChanged", (_event, instanceId: string, bounds: MapViewBounds) => {
+    latestBoundsByInstance.set(instanceId, bounds);
     for (const tracked of windows.values()) {
       if (tracked.role === "auditLog" && tracked.pairedInstanceId === instanceId) {
         tracked.win.webContents.send("windows:instanceBounds", bounds);
@@ -581,6 +591,12 @@ function registerWindowIpcHandlers() {
       getMainWindow()?.webContents.send("windows:instanceBounds", bounds);
     }
   });
+
+  // Lets a freshly (re)mounted audit-log window (or the main window itself,
+  // for the primary radar/audit-log pairing) catch up on whatever bbox its
+  // paired radar already reported before it existed — see
+  // latestBoundsByInstance above.
+  ipcMain.handle("windows:getInstanceBounds", (_event, instanceId: string) => latestBoundsByInstance.get(instanceId) ?? null);
 
   // Lets Shell initialize its "is my radar undocked?" state correctly on
   // mount instead of assuming false — the main window's own React state

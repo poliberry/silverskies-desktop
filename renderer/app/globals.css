@@ -274,6 +274,10 @@ body {
     color-mix(in srgb, white 60%, rgb(var(--tg))) 50%, rgba(var(--tg), 0.85) 70%, transparent 100%);
   filter: blur(6px); opacity: 0; animation: topGlowSweep 5s ease-in-out infinite;
 }
+/* Settings → General → "Top Glow Sweep" OFF — hidden via CSS rather than
+   unmounting the element, so useSeverePulse's imperative pulsing state
+   survives the setting being toggled back on mid-alert (see Shell.tsx). */
+#top-glow.top-glow-disabled { display: none; }
 #top-glow.pulsing { animation: topGlowPulse 1.4s ease-in-out infinite; }
 #top-glow.pulsing::before, #top-glow.pulsing::after { animation: topGlowSweep 2.1s ease-in-out infinite; }
 @keyframes topGlowSweep {

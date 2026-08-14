@@ -50,6 +50,7 @@ export interface SilverSkiesApi {
     onInstanceLocation(callback: (location: WindowLocation) => void): () => void;
     sendInstanceBounds(instanceId: string, bounds: MapViewBounds): void;
     onInstanceBounds(callback: (bounds: MapViewBounds) => void): () => void;
+    getInstanceBounds(instanceId: string): Promise<MapViewBounds | null>;
     onPrimaryRadarClosed(callback: () => void): () => void;
     isPrimaryRadarOpen(): Promise<boolean>;
     onPrimaryAuditLogClosed(callback: () => void): () => void;

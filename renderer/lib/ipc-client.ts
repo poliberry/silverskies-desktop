@@ -177,6 +177,10 @@ export const ipc = {
       if (!window.silverSkies) return () => {};
       return window.silverSkies.windows.onInstanceBounds(callback);
     },
+    async getInstanceBounds(instanceId: string): Promise<MapViewBounds | null> {
+      if (!window.silverSkies) return null;
+      return window.silverSkies.windows.getInstanceBounds(instanceId);
+    },
     onPrimaryRadarClosed(callback: () => void): () => void {
       if (!window.silverSkies) return () => {};
       return window.silverSkies.windows.onPrimaryRadarClosed(callback);
