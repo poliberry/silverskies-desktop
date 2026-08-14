@@ -14,29 +14,39 @@ import {
 import type { AlertSource, NormalizedAlert } from "@/types/alerts";
 import type { TodayOutlook } from "@/lib/forecast-outlook";
 import type { SpcOutlookFeature } from "@/lib/alerts/spc-outlook";
-import { ALERT_TYPE_CATALOG } from "@/lib/alerts/alertTypeCatalog";
+import { alertClass, hazardGroupKey } from "@/lib/alerts/classify";
+import { DEMO_ALERT_GROUPS } from "@/lib/alerts/demo";
 import { Accordion, AccordionItem, AccordionHeader, AccordionTrigger, AccordionPanel } from "@/components/ui/accordion";
 import { AlertRow } from "./AlertRow";
 import { TodayOutlookRow } from "./TodayOutlookRow";
 import { SpcOutlookBanner } from "./SpcOutlookBanner";
 
-// cssClass -> clean canonical label (e.g. "alert-flash-flood-warn" ->
-// "Flash Flood Warning"), reusing the same catalog Settings -> Alerts
-// already builds — so a group's header always reads as the tidy hazard
-// name regardless of how verbose/messy a given source's own event text is
-// (a WMO/librewxr title can be a full sentence like "Flash Flood Warning
-// issued for XYZ County until 5pm").
-const GROUP_LABEL_BY_CLASS: Record<string, string> = Object.fromEntries(
-  ALERT_TYPE_CATALOG.map((entry) => [entry.cssClass, entry.label]),
-);
+// hazardGroupKey -> clean canonical label, built from the same demo-event
+// catalog Settings -> Alerts draws from — each demo event is already a
+// clean, single-hazard name, so reverse-mapping through hazardGroupKey
+// gives a distinct label per *hazard*, not per shared cssClass (several
+// genuinely different hazards — e.g. "Excessive Heat Warning" and "Extreme
+// Wind Warning" — intentionally share the "alert-extreme" cssClass for
+// styling, so a cssClass-keyed label lookup would show the wrong hazard's
+// name for one of them once grouping stopped merging them together).
+const GROUP_LABEL_BY_KEY: Record<string, string> = (() => {
+  const labels: Record<string, string> = {};
+  for (const group of DEMO_ALERT_GROUPS) {
+    for (const { event, severity } of group.options) {
+      const key = hazardGroupKey(event, alertClass(event, severity, event, ""));
+      if (!(key in labels)) labels[key] = event;
+    }
+  }
+  return labels;
+})();
 
 interface AlertGroup {
   /** Stable group identity (see groupAlertsByEvent) — used as the React/
    * accordion key, not shown to the user. */
-  cssClass: string;
+  groupKey: string;
   /** The clean canonical label for this hazard type, shown as the group's
    * header — falls back to the first-seen member's displayEvent only for a
-   * cssClass the catalog doesn't know about. */
+   * hazard the demo catalog doesn't reach. */
   displayEvent: string;
   alerts: NormalizedAlert[];
 }
@@ -47,26 +57,28 @@ interface AlertGroup {
  * only gives a full sentence like "Flash Flood Warning issued for XYZ County
  * until 5pm" — into one collapsible section.
  *
- * Keyed on `cssClass`, not `displayEvent`, deliberately: cssClass already
- * comes from alertClass() in lib/alerts/classify.ts, which matches hazard
- * phrases via regex (`.test(event)`, i.e. "contains", not "equals") against
- * the *raw* event/headline/description text before displayEvent is even
- * derived. That's exactly the "contains this phrase" grouping wanted here,
- * already implemented and already computed per alert — grouping on the
- * plain displayEvent string would only work for sources whose event field
- * is already just the clean hazard name, which not all of them are. */
+ * Keyed via hazardGroupKey(), not `cssClass` or `displayEvent` directly:
+ * cssClass matches hazard phrases via regex (`.test(event)`, i.e.
+ * "contains", not "equals") against the raw event text, which is exactly
+ * the "contains this phrase" grouping wanted here — but several distinct
+ * hazards intentionally share one cssClass for styling, so grouping on the
+ * class itself would merge unrelated hazards (see hazardGroupKey's own
+ * doc). Grouping on the plain displayEvent string, meanwhile, would only
+ * work for sources whose event field is already just the clean hazard
+ * name, which not all of them are. */
 function groupAlertsByEvent(alerts: NormalizedAlert[]): AlertGroup[] {
   const groups: AlertGroup[] = [];
   const index = new Map<string, AlertGroup>();
   for (const alert of alerts) {
-    let group = index.get(alert.cssClass);
+    const key = hazardGroupKey(alert.event, alert.cssClass);
+    let group = index.get(key);
     if (!group) {
       group = {
-        cssClass: alert.cssClass,
-        displayEvent: GROUP_LABEL_BY_CLASS[alert.cssClass] ?? alert.displayEvent,
+        groupKey: key,
+        displayEvent: GROUP_LABEL_BY_KEY[key] ?? alert.displayEvent,
         alerts: [],
       };
-      index.set(alert.cssClass, group);
+      index.set(key, group);
       groups.push(group);
     }
     group.alerts.push(alert);
@@ -129,7 +141,7 @@ export function AlertLog({
   const seenGroupKeys = useRef<Set<string>>(new Set());
   const [openGroups, setOpenGroups] = useState<string[]>([]);
   useEffect(() => {
-    const newKeys = groups.map((g) => g.cssClass).filter((k) => !seenGroupKeys.current.has(k));
+    const newKeys = groups.map((g) => g.groupKey).filter((k) => !seenGroupKeys.current.has(k));
     if (newKeys.length === 0) return;
     newKeys.forEach((k) => seenGroupKeys.current.add(k));
     setOpenGroups((prev) => [...prev, ...newKeys]);
@@ -218,7 +230,7 @@ export function AlertLog({
           {groups.length > 0 && (
             <Accordion multiple value={openGroups} onValueChange={(v) => setOpenGroups(v as string[])}>
               {groups.map((group) => (
-                <AccordionItem key={group.cssClass} value={group.cssClass}>
+                <AccordionItem key={group.groupKey} value={group.groupKey}>
                   <AccordionHeader>
                     <AccordionTrigger className="alert-group-trigger">
                       <i className="ph ph-caret-right alert-group-caret" aria-hidden="true" />

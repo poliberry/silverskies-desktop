@@ -20,6 +20,7 @@ import { ThemesPanel } from "./ThemesPanel";
 import { WeatherRadioPanel } from "./WeatherRadioPanel";
 import type { NormalizedAlert } from "@/types/alerts";
 import type { ThemePref, TimeFormatPref, UiModePref, UnitPref, WeatherProviderId } from "@/types/settings";
+import type { WindowLocation } from "@/types/windows";
 
 const REFRESH_OPTIONS = [
   { label: "5M", value: 5 },
@@ -37,6 +38,9 @@ export interface SettingsDialogProps {
   onDemoAlertsChange: (alerts: NormalizedAlert[]) => void;
   onTriggerAsteroid: () => void;
   asteroidActive: boolean;
+  /** The active location — threaded through to WeatherRadioPanel for its
+   * "Auto" live-feed preview. */
+  activeLocation: WindowLocation | null;
 }
 
 export function SettingsDialog({
@@ -44,6 +48,7 @@ export function SettingsDialog({
   onDemoAlertsChange,
   onTriggerAsteroid,
   asteroidActive,
+  activeLocation,
 }: SettingsDialogProps) {
   const { config, updateConfig } = useSettings();
   const [apiKeyDraft, setApiKeyDraft] = useState("");
@@ -337,7 +342,7 @@ export function SettingsDialog({
           </TabsContent>
 
           <TabsContent value="radio" className="pt-4">
-            <WeatherRadioPanel />
+            <WeatherRadioPanel location={activeLocation} />
           </TabsContent>
 
           <TabsContent value="themes" className="pt-4">

@@ -66,6 +66,7 @@ export interface ConfigFile {
    * via speech synthesis; "live" plays a user-supplied audio stream while
    * attempting to decode real SAME tones from it. */
   weatherRadioMode: "simulated" | "live";
+  weatherRadioLiveFeedMode: "auto" | "manual";
   weatherRadioLiveStreamUrl: string | null;
 }
 
@@ -184,5 +185,6 @@ export const DEFAULT_CONFIG: ConfigFile = {
   customTheme: null,
   weatherRadioEnabled: false,
   weatherRadioMode: "simulated",
+  weatherRadioLiveFeedMode: "auto",
   weatherRadioLiveStreamUrl: null,
 };

@@ -350,7 +350,7 @@ export function Shell() {
       {cowBackgroundActive && (
         <div
           aria-hidden="true"
-          style={{ position: "absolute", inset: 0, background: "var(--bg)", opacity: 0.6, zIndex: 0 }}
+          style={{ position: "absolute", inset: 0, background: "var(--bg)", opacity: 0.6, zIndex: 0, pointerEvents: "none" }}
         />
       )}
       {showAsteroidGame && <AsteroidShooterGame onClose={() => setShowAsteroidGame(false)} />}
@@ -408,7 +408,7 @@ export function Shell() {
                 }
               />
               <SheetContent>
-                <WeatherRadioSheetContent />
+                <WeatherRadioSheetContent location={active} />
               </SheetContent>
             </Sheet>
           }
@@ -433,6 +433,7 @@ export function Shell() {
               onDemoAlertsChange={setDemoAlerts}
               onTriggerAsteroid={asteroid.trigger}
               asteroidActive={asteroid.isActive}
+              activeLocation={active}
             />
           }
         />

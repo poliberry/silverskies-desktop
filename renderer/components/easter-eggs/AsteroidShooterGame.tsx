@@ -47,8 +47,15 @@ function wrap(v: number, max: number): number {
   return v;
 }
 
-function distance(a: Vec, b: Vec): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
+/** Distance between two points in the wrapped/toroidal game world — the
+ * screen edges are joined (see `wrap`), so an object at x=719 and one at
+ * x=1 on a 720-wide canvas are really only 2px apart, not 718px. Using
+ * plain Euclidean distance for collisions meant nothing near an edge could
+ * ever hit anything that had wrapped to the opposite edge. */
+function distance(a: Vec, b: Vec, width: number, height: number): number {
+  const dx = Math.min(Math.abs(a.x - b.x), width - Math.abs(a.x - b.x));
+  const dy = Math.min(Math.abs(a.y - b.y), height - Math.abs(a.y - b.y));
+  return Math.hypot(dx, dy);
 }
 
 function spawnAsteroid(width: number, height: number, avoid: Vec): Asteroid {
@@ -63,7 +70,7 @@ function spawnAsteroid(width: number, height: number, avoid: Vec): Asteroid {
           : edge === 2
             ? { x: Math.random() * width, y: height }
             : { x: 0, y: Math.random() * height };
-  } while (distance(pos, avoid) < 150);
+  } while (distance(pos, avoid, width, height) < 150);
   const angle = Math.random() * Math.PI * 2;
   const speed = 0.6 + Math.random() * 1.2;
   return { pos, vel: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed }, radius: 24 + Math.random() * 16 };
@@ -177,7 +184,7 @@ export function AsteroidShooterGame({ onClose }: AsteroidShooterGameProps) {
 
       const survivingAsteroids: Asteroid[] = [];
       for (const a of asteroids) {
-        const hitByBullet = bullets.find((b) => distance(b.pos, a.pos) < a.radius);
+        const hitByBullet = bullets.find((b) => distance(b.pos, a.pos, width, height) < a.radius);
         if (hitByBullet) {
           bullets = bullets.filter((b) => b !== hitByBullet);
           localScore += 10;
@@ -203,7 +210,7 @@ export function AsteroidShooterGame({ onClose }: AsteroidShooterGameProps) {
       }
 
       if (ship.invuln <= 0) {
-        const hitShip = asteroids.some((a) => distance(a.pos, ship.pos) < a.radius + SHIP_RADIUS * 0.6);
+        const hitShip = asteroids.some((a) => distance(a.pos, ship.pos, width, height) < a.radius + SHIP_RADIUS * 0.6);
         if (hitShip) {
           localLives -= 1;
           setLives(localLives);

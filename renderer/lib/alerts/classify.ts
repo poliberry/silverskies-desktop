@@ -146,6 +146,33 @@ export function alertClass(
   return (severity && SEVERITY_CLASS[severity]) || "alert-unknown";
 }
 
+/** A stable key identifying an alert's actual hazard type — distinct from
+ * `cssClass`, which several genuinely different hazards intentionally
+ * share for styling purposes (e.g. "Excessive Heat Warning", "Extreme Wind
+ * Warning", and "Extreme Heat Warning" are all `alert-extreme`). Grouping
+ * alerts (see AlertLog.tsx's accordion) by cssClass would incorrectly merge
+ * those into one section; this instead keys on which specific
+ * ALERT_CLASS_MAP rule matched (each rule/regex is unique per hazard, even
+ * when several rules happen to resolve to the same cssClass), falling back
+ * to the alert's own event text — not the shared severity-only cssClass —
+ * when no rule matches at all. The inline tornado/severe-thunderstorm
+ * tiering in alertClass() (PDS/destructive/observed/emergency) already
+ * produces a cssClass unique per tier, so those are safe to key on cssClass
+ * directly. */
+export function hazardGroupKey(event: string, cssClass: string): string {
+  if (
+    cssClass.startsWith("alert-tornado-") ||
+    cssClass === "alert-svr-pds" ||
+    cssClass === "alert-svr-destructive"
+  ) {
+    return cssClass;
+  }
+  for (const [re] of ALERT_CLASS_MAP) {
+    if (re.test(event)) return re.source;
+  }
+  return event.trim().toLowerCase();
+}
+
 /** Overrides the display name for alerts whose `event` field doesn't
  * reflect the true tier (e.g. a "Tornado Warning" that's actually a
  * Tornado Emergency per its headline text). */

@@ -28,6 +28,7 @@ const DEFAULT_CONFIG: ConfigFile = {
   customTheme: null,
   weatherRadioEnabled: false,
   weatherRadioMode: "simulated",
+  weatherRadioLiveFeedMode: "auto",
   weatherRadioLiveStreamUrl: null,
 };
 

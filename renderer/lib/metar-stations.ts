@@ -30,7 +30,12 @@ export async function fetchMetarStationList(): Promise<MetarStation[]> {
   // toggle into an unbounded fetch loop.
   for (let page = 0; page < 20 && url; page++) {
     const r: Response = await fetch(url, { headers: { Accept: "application/geo+json" } });
-    if (!r.ok) break;
+    // A mid-pagination failure must fail the whole fetch, not silently
+    // return whatever pages already succeeded — useMetarStations caches
+    // this result for 24h, so a truncated list from a transient error would
+    // otherwise leave whole regions missing wind barbs for a full day
+    // instead of just retrying.
+    if (!r.ok) throw new Error(`metar stations fetch failed: ${r.status}`);
     const d: StationListPage = await r.json();
     for (const f of d.features ?? []) {
       stations.push({

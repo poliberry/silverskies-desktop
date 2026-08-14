@@ -35,31 +35,64 @@ export function useWeatherRadio({ enabled, mode, alerts }: UseWeatherRadioOption
   const idsKey = alerts.map((a) => a.id).join(",");
 
   useEffect(() => {
-    if (!enabled || mode !== "simulated") return;
+    if (!enabled || mode !== "simulated") {
+      // Reset so re-enabling (or switching back to "simulated") re-seeds
+      // from what's active *then*, instead of immediately treating every
+      // currently-active alert as newly arrived because the old seen-set
+      // (from before this went inactive) no longer contains them.
+      seenRef.current = null;
+      return;
+    }
 
     if (seenRef.current === null) {
-      // First run since the radio was enabled — seed with what's already
-      // active instead of announcing every pre-existing alert in one burst.
+      // First run since the radio was (re-)enabled — seed with what's
+      // already active instead of announcing every pre-existing alert in
+      // one burst.
       seenRef.current = new Set(alerts.map((a) => a.id));
       return;
     }
 
-    const newAlerts = alerts.filter((a) => !seenRef.current!.has(a.id));
-    for (const a of newAlerts) seenRef.current.add(a.id);
+    const seen = seenRef.current;
+    const newAlerts = alerts.filter((a) => !seen.has(a.id));
+    for (const a of newAlerts) seen.add(a.id);
     const toAnnounce = newAlerts.filter((a) => !hasNotified(`radio:${a.id}`));
     if (toAnnounce.length === 0) return;
 
     let cancelled = false;
     void (async () => {
-      for (const alert of toAnnounce) {
-        if (cancelled) return;
-        markNotified(`radio:${alert.id}`);
-        const ctx = new AudioContext();
-        try {
-          await synthesizeSameAttentionTone(ctx);
-          if (!cancelled) speakAlert(alert);
-        } finally {
-          void ctx.close();
+      // Only an alert that actually finished its tone + speech counts as
+      // "announced" — tracked by index so the cleanup below knows exactly
+      // which trailing alerts (interrupted mid-tone, mid-speech, or never
+      // started at all) to un-mark as seen, regardless of *where* in the
+      // loop this got cancelled.
+      let completedThrough = -1;
+      try {
+        for (let i = 0; i < toAnnounce.length; i++) {
+          if (cancelled) return;
+          const alert = toAnnounce[i];
+          const ctx = new AudioContext();
+          try {
+            await synthesizeSameAttentionTone(ctx);
+            if (cancelled) return;
+            // Awaited, not fired-and-forgotten — speakAlert's own
+            // `cancel()` on the *next* call would otherwise cut this
+            // alert's speech off mid-sentence the instant the next one in
+            // the batch started.
+            await speakAlert(alert);
+          } finally {
+            void ctx.close();
+          }
+          if (cancelled) return;
+          // Marked persistently-notified only now, after it actually
+          // finished playing — marking it beforehand (before the tone even
+          // played) meant an interrupted tone left the alert both
+          // unannounced *and* permanently unretriable.
+          markNotified(`radio:${alert.id}`);
+          completedThrough = i;
+        }
+      } finally {
+        for (let i = completedThrough + 1; i < toAnnounce.length; i++) {
+          seen.delete(toAnnounce[i].id);
         }
       }
     })();

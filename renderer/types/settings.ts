@@ -66,6 +66,10 @@ export interface ConfigFile {
    * via speech synthesis; "live" plays a user-supplied audio stream while
    * attempting to decode real SAME tones from it. */
   weatherRadioMode: "simulated" | "live";
+  /** "auto" resolves the nearest confirmed-live public NWR relay stream to
+   * the active location (see lib/weather-radio/nwr-directory.ts); "manual"
+   * uses weatherRadioLiveStreamUrl instead. */
+  weatherRadioLiveFeedMode: "auto" | "manual";
   weatherRadioLiveStreamUrl: string | null;
 }
 
