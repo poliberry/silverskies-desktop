@@ -13,6 +13,16 @@ export interface WindowLocation {
   label: string;
 }
 
+/** A map viewport (or a user-drawn selection within one), as
+ * [west, south, east, north] — same tuple shape as lib/alerts/librewxr.ts's
+ * own `BBox`, duplicated here rather than imported since this type is also
+ * mirrored into electron/types.ts, which can't see renderer/lib. Relayed
+ * fire-and-forget between a radar instance and its paired audit-log
+ * window(s), the same way WindowLocation is — but never persisted to
+ * session.json, since a viewport isn't part of a window's identity the way
+ * its location is. */
+export type MapViewBounds = [west: number, south: number, east: number, north: number];
+
 export interface WindowBoundsRect {
   x: number;
   y: number;

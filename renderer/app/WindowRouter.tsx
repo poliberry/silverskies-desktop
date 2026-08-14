@@ -16,6 +16,7 @@ interface ParsedWindowParams {
   pairedInstanceId: string | null;
   location: WindowLocation | null;
   token: string | null;
+  isPrimaryPopout: boolean;
 }
 
 function parseWindowParams(): ParsedWindowParams {
@@ -35,6 +36,7 @@ function parseWindowParams(): ParsedWindowParams {
     pairedInstanceId: params.get("pairedInstanceId"),
     location,
     token: params.get("token"),
+    isPrimaryPopout: params.get("isPrimaryPopout") === "1",
   };
 }
 
@@ -59,7 +61,13 @@ export function WindowRouter() {
 
   switch (params.role) {
     case "radar":
-      return <RadarWindow instanceId={params.instanceId ?? ""} initialLocation={params.location} />;
+      return (
+        <RadarWindow
+          instanceId={params.instanceId ?? ""}
+          initialLocation={params.location}
+          isPrimaryPopout={params.isPrimaryPopout}
+        />
+      );
     case "conditions":
       return (
         <ConditionsWindow instanceId={params.pairedInstanceId ?? ""} initialLocation={params.location} />

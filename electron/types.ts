@@ -45,6 +45,10 @@ export interface ConfigFile {
    * an alerts-panel banner when the active location falls inside a risk
    * category. */
   spcOutlookEnabled: boolean;
+  /** The animated gradient sweep across the top of the main window. Purely
+   * decorative, so it's the one visual toggle that lives in General rather
+   * than tied to any particular data feed. */
+  topGlowEnabled: boolean;
   uiMode: UiModePref;
   /** Per alert-type (keyed by the `cssClass` taxonomy from
    * renderer/lib/alerts/classify.ts) visibility/color overrides for the
@@ -87,6 +91,13 @@ export interface WindowLocation {
   lon: number;
   label: string;
 }
+
+/** A map viewport (or a user-drawn selection within one), as
+ * [west, south, east, north] — mirrors renderer/types/windows.ts. Relayed
+ * fire-and-forget between a radar instance and its paired audit-log
+ * window(s), never persisted to SessionFile (a viewport isn't part of a
+ * window's identity the way its location is). */
+export type MapViewBounds = [west: number, south: number, east: number, north: number];
 
 export interface WindowBoundsRect {
   x: number;
@@ -159,6 +170,7 @@ export const DEFAULT_CONFIG: ConfigFile = {
   devToolsEnabled: false,
   notificationsEnabled: true,
   spcOutlookEnabled: true,
+  topGlowEnabled: true,
   uiMode: "classic",
   alertTypeOverrides: {},
   themeId: "default",

@@ -42,6 +42,10 @@ export interface ConfigFile {
    * an alerts-panel banner when the active location falls inside a risk
    * category. */
   spcOutlookEnabled: boolean;
+  /** The animated gradient sweep across the top of the main window. Purely
+   * decorative, so it's the one visual toggle that lives in General rather
+   * than tied to any particular data feed. */
+  topGlowEnabled: boolean;
   /** "classic" is today's single-window layout; "advanced" surfaces the
    * radar pop-out/multi-instance affordances. */
   uiMode: UiModePref;

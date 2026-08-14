@@ -228,6 +228,29 @@ export function SettingsDialog({
                 open the next time you launch the app.
               </p>
             </div>
+
+            <div className="settings-bar-section">
+              <div className="settings-bar-label">TOP GLOW SWEEP</div>
+              <div className="settings-bar-group">
+                <button
+                  className={`unit-btn ${config.topGlowEnabled ? "active" : ""}`}
+                  onClick={() => updateConfig({ topGlowEnabled: true })}
+                >
+                  ON
+                </button>
+                <button
+                  className={`unit-btn ${!config.topGlowEnabled ? "active" : ""}`}
+                  onClick={() => updateConfig({ topGlowEnabled: false })}
+                >
+                  OFF
+                </button>
+              </div>
+              <p className="font-mono text-[0.68rem]" style={{ color: "var(--text3)" }}>
+                The animated accent-colored sweep across the top edge of the main window (and its faster
+                pulse during an active severe alert). Purely decorative — turn it off if it&apos;s
+                distracting.
+              </p>
+            </div>
           </TabsContent>
 
           <TabsContent value="sources" className="flex flex-col gap-5 pt-4">

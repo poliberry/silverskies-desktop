@@ -21,11 +21,13 @@ const MIN_WDTH = 25;
  * numbers elsewhere in the app, but adapted per-title instead of a fixed
  * `font-variation-settings`.
  *
- * Fitting is done entirely via the `wdth` variation axis (starting stretched
- * wide, narrowing toward ultra-condensed as titles get longer) — font-size
- * stays fixed. Even the longest product names (e.g. "Severe Thunderstorm
- * Warning (Destructive)") fit within the axis range, so there's no
- * font-size fallback to reach for.
+ * Fitting is done primarily via the `wdth` variation axis (starting
+ * stretched wide, narrowing toward ultra-condensed as titles get longer) —
+ * font-size stays fixed. Most product names fit on one line well within the
+ * axis range, but some combine a long event name with a long dynamic
+ * suffix (e.g. "Flash Flood Warning Issued August 14 at 12:52 PM") that
+ * still doesn't fit even fully condensed — those wrap onto additional
+ * lines at that same condensed width rather than clipping.
  */
 export function FitTitle({ text, color, fontSizePx = 34 }: FitTitleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -44,6 +46,10 @@ export function FitTitle({ text, color, fontSizePx = 34 }: FitTitleProps) {
       if (!container2 || !el2) return;
       let wdth = MAX_WDTH;
       el2.style.fontVariationSettings = `'wdth' ${wdth}`;
+      // Reset each pass — a previous fit() (a wider container, shorter text)
+      // may have left this wrapped; re-measuring nowrap first is what lets a
+      // since-widened container go back to a single line.
+      el2.style.whiteSpace = "nowrap";
 
       const available = container2.clientWidth;
       if (available <= 0) return; // not laid out yet — the mount-time fit() call below will retry
@@ -52,6 +58,11 @@ export function FitTitle({ text, color, fontSizePx = 34 }: FitTitleProps) {
         wdth -= 2;
         el2.style.fontVariationSettings = `'wdth' ${wdth}`;
       }
+
+      // Even fully condensed, some titles (a long event name plus a long
+      // dynamic suffix) still don't fit on one line — wrap at that same
+      // condensed width instead of clipping the rest of the title.
+      if (el2.scrollWidth > available) el2.style.whiteSpace = "normal";
     }
 
     fit();
@@ -86,6 +97,10 @@ export function FitTitle({ text, color, fontSizePx = 34 }: FitTitleProps) {
           letterSpacing: "-0.01em",
           color,
           lineHeight: 1.1,
+          // Only takes effect once fit() switches whiteSpace to "normal" —
+          // lets a long single token (rare, but e.g. a run-on location list)
+          // break mid-word instead of overflowing its wrapped line.
+          overflowWrap: "break-word",
           // Overrides the app-wide `tabular-nums` (body, app/globals.css) —
           // fixed-width digit glyphs read oddly against a title stretched
           // via the wdth axis (e.g. "Mesoscale Discussion 1939"); proportional

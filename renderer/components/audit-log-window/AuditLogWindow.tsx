@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertLog } from "@/components/alerts/AlertLog";
-import { useAlerts } from "@/hooks/useAlerts";
+import { useAlertsForBounds } from "@/hooks/useAlertsForBounds";
 import { useSpcOutlook } from "@/hooks/useSpcOutlook";
 import { useSettings } from "@/hooks/useSettings";
 import { useWeather } from "@/hooks/useWeather";
@@ -15,11 +15,12 @@ import { findOutlookAtPoint } from "@/lib/alerts/spc-outlook";
 import { buildTodayOutlook } from "@/lib/forecast-outlook";
 import type { WindowLocation } from "@/types/windows";
 import type { UnitPref } from "@/types/settings";
+import type { BBox } from "@/lib/alerts/librewxr";
 
 export interface AuditLogWindowProps {
   /** The radar window instance this one is paired to — or the "main"
    * sentinel when popped out of the main window's own docked audit log
-   * (see electron/main.ts). Main only relays location updates to the
+   * (see electron/main.ts). Main only relays location/bounds updates to the
    * correctly paired window, so nothing here needs to filter incoming
    * events by it; kept for clarity/future use. */
   instanceId: string;
@@ -35,8 +36,13 @@ export interface AuditLogWindowProps {
  * receiving it over IPC, the same way ConditionsWindow independently calls
  * useWeather() instead of Shell handing it props.
  */
-export function AuditLogWindow({ initialLocation }: AuditLogWindowProps) {
+export function AuditLogWindow({ instanceId, initialLocation }: AuditLogWindowProps) {
   const [location, setLocation] = useState<WindowLocation | null>(initialLocation);
+  // The paired radar instance's current viewport (or its active shift-drag
+  // selection) — see sendInstanceBounds/onInstanceBounds. Independent of
+  // `location` above: that still drives weather/SPC-outlook (point-based),
+  // while this drives the alert list itself.
+  const [bounds, setBounds] = useState<BBox | null>(null);
   const { config } = useSettings();
   // AlertLog has no theme prop of its own — it reads CSS variables scoped by
   // the <html data-theme> attribute this hook's own effect sets, same as
@@ -45,13 +51,32 @@ export function AuditLogWindow({ initialLocation }: AuditLogWindowProps) {
   useAppliedTheme();
 
   useEffect(() => ipc.windows.onInstanceLocation(setLocation), []);
+  useEffect(() => ipc.windows.onInstanceBounds(setBounds), []);
+  // onInstanceBounds only ever delivers *future* updates — the paired radar
+  // normally reports its own bbox as soon as its map mounts, which is before
+  // this window is opened, so without this catch-up call `bounds` would sit
+  // at null (and the alert list empty) until the user next pans/zooms it.
+  useEffect(() => {
+    let cancelled = false;
+    void ipc.windows.getInstanceBounds(instanceId).then((cached) => {
+      if (cancelled || !cached) return;
+      // Functional form, not a bare setBounds(cached) — a live
+      // onInstanceBounds push (a real pan/zoom) can land while this request
+      // is still in flight, and that's always more current than whatever
+      // was cached when the request was made.
+      setBounds((current) => current ?? cached);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [instanceId]);
 
   useDocumentTitle(location ? `${location.label} - Audit Log - Silver Skies` : "Audit Log - Silver Skies");
 
   const unit: UnitPref = config?.units ?? "F";
   const spcOutlookEnabled = config?.spcOutlookEnabled ?? true;
 
-  const alertsQuery = useAlerts(location?.lat ?? null, location?.lon ?? null);
+  const alertsQuery = useAlertsForBounds(bounds);
   const weatherQuery = useWeather(location);
   const spcOutlookQuery = useSpcOutlook(spcOutlookEnabled);
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, WMSTileLayer, Marker, GeoJSON, SVGOverlay, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, WMSTileLayer, Marker, GeoJSON, SVGOverlay, Rectangle, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import type { LatLngBoundsExpression } from "leaflet";
 import type { Feature, FeatureCollection } from "geojson";
@@ -104,6 +104,163 @@ function InvalidateSizeOnResize() {
     return () => observer.disconnect();
   }, [map]);
   return null;
+}
+
+const MIN_SELECTION_DRAG_PX = 8;
+
+/** Feeds the parent's `onBoundsChange` — the audit log's alerts query — with
+ * whatever bbox should currently drive it: a user's shift-drag rectangle
+ * selection when one is active, otherwise the map's own viewport. Also owns
+ * the shift+drag gesture itself and the persistent/live selection rectangle
+ * overlays.
+ *
+ * Shift+drag is repurposed from Leaflet's default `boxZoom` behavior (zoom
+ * to the dragged rectangle) — see `boxZoom={false}` on MapContainer below —
+ * so the same gesture now draws a selection instead. `map.dragging` is
+ * suspended for the duration of the drag so it doesn't also pan the map. A
+ * plain click (no shift) or the Escape key clears an active selection; so
+ * does a fresh shift-drag (replacing it) or the active location changing
+ * (an old box drawn over a previous search shouldn't keep silently
+ * filtering the log after a new one). */
+function AlertsBoundsController({
+  lat,
+  lon,
+  onBoundsChange,
+}: {
+  lat: number;
+  lon: number;
+  onBoundsChange?: (bbox: BBox) => void;
+}) {
+  const map = useMap();
+  const [viewportBbox, setViewportBbox] = useState<BBox>(() => boundsToBBox(map.getBounds()));
+  const [selection, setSelection] = useState<L.LatLngBounds | null>(null);
+  const [dragStart, setDragStart] = useState<L.LatLng | null>(null);
+  const [dragCurrent, setDragCurrent] = useState<L.LatLng | null>(null);
+
+  // Also cancels any drag still in progress and re-enables map.dragging —
+  // without that, a location change mid-drag (search, saved-location click,
+  // GPS fix, all of which fly the map elsewhere via RecenterOnLocationChange)
+  // would otherwise leave dragging disabled until the eventual mouseup, which
+  // would then compute a bogus selection spanning the old location's
+  // drag-start point and wherever the pointer happened to end up over the
+  // new one, filtering the new location's alerts against a meaningless box.
+  useEffect(() => {
+    if (dragStart) {
+      map.dragging.enable();
+      setDragStart(null);
+      setDragCurrent(null);
+    }
+    setSelection(null);
+    // Deliberately keyed on [lat, lon] alone — this should only fire when
+    // the active location actually changes, not on every drag start/end
+    // (which already manage `map`/`dragStart` themselves).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lon]);
+
+  // Escape clears an active selection (or cancels one still mid-drag)
+  // regardless of whether the map itself has focus — the same global-ish
+  // reach as the "×" close on any of this app's own dialogs.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (dragStart) {
+        map.dragging.enable();
+        setDragStart(null);
+        setDragCurrent(null);
+      }
+      setSelection(null);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [map, dragStart]);
+
+  // Tracks the rest of an in-progress drag on `document` rather than via
+  // Leaflet's own map-scoped mousemove/mouseup events — those only fire
+  // while the pointer stays over the map element, so releasing outside it
+  // (dragging off the edge of the window, say) would otherwise never reach
+  // a mouseup handler at all, permanently leaving map.dragging disabled with
+  // no way to pan short of Escape. A native listener on `document` fires
+  // regardless of where the pointer ends up, and map.mouseEventToLatLng
+  // projects it back to a map coordinate the same way Leaflet's own event
+  // would have. Only attached while a drag is actually in progress.
+  useEffect(() => {
+    if (!dragStart) return;
+    function onMove(e: MouseEvent) {
+      setDragCurrent(map.mouseEventToLatLng(e));
+    }
+    function onUp(e: MouseEvent) {
+      // Only the left button release ends the drag it started — releasing
+      // some other button mid-drag (left still held) shouldn't finalize it.
+      if (e.button !== 0) return;
+      map.dragging.enable();
+      const end = map.mouseEventToLatLng(e);
+      const bounds = L.latLngBounds(dragStart!, end);
+      const sw = map.latLngToContainerPoint(bounds.getSouthWest());
+      const ne = map.latLngToContainerPoint(bounds.getNorthEast());
+      setDragStart(null);
+      setDragCurrent(null);
+      // A shift+click with no real drag shouldn't "select" a zero-size box.
+      if (Math.abs(sw.x - ne.x) < MIN_SELECTION_DRAG_PX || Math.abs(sw.y - ne.y) < MIN_SELECTION_DRAG_PX) return;
+      setSelection(bounds);
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [map, dragStart]);
+
+  useMapEvents({
+    moveend: () => {
+      // Round so panning by a few pixels doesn't spam refetches — same
+      // tolerance AlertPolygonsLayer's own bbox tracking uses.
+      setViewportBbox(boundsToBBox(map.getBounds()).map((v) => Math.round(v * 20) / 20) as BBox);
+    },
+    mousedown: (e) => {
+      // button 0 = left — a shift+right/middle-drag shouldn't start a
+      // selection (or disable panning) at all; those buttons don't pan the
+      // map on their own either.
+      if (!e.originalEvent.shiftKey || e.originalEvent.button !== 0) return;
+      map.dragging.disable();
+      setSelection(null);
+      setDragStart(e.latlng);
+      setDragCurrent(e.latlng);
+    },
+    click: (e) => {
+      if (!e.originalEvent.shiftKey && selection) setSelection(null);
+    },
+  });
+
+  const effectiveBbox = selection ? boundsToBBox(selection) : viewportBbox;
+  useEffect(() => {
+    onBoundsChange?.(effectiveBbox);
+    // `effectiveBbox` is a fresh array/tuple every render — keying off its
+    // joined string instead avoids re-firing (and the parent state update
+    // that would trigger) on every render that doesn't actually change it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveBbox.join(",")]);
+
+  const dragBounds = dragStart && dragCurrent ? L.latLngBounds(dragStart, dragCurrent) : null;
+
+  return (
+    <>
+      {dragBounds && (
+        <Rectangle
+          bounds={dragBounds}
+          pathOptions={{ color: "#ffffff", weight: 1, dashArray: "4 4", fillOpacity: 0.08 }}
+          interactive={false}
+        />
+      )}
+      {selection && !dragBounds && (
+        <Rectangle
+          bounds={selection}
+          pathOptions={{ color: "#ffffff", weight: 1.5, dashArray: "6 4", fillOpacity: 0.05 }}
+          interactive={false}
+        />
+      )}
+    </>
+  );
 }
 
 /** Flies to a newly-selected station once (not on every re-render while it
@@ -366,6 +523,7 @@ export function LeafletRadarMap({
   spcOutlookEnabled,
   settings,
   renderSettingsInline = true,
+  onBoundsChange,
 }: RadarMapProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -530,6 +688,10 @@ export function LeafletRadarMap({
           center={[lat, lon]}
           zoom={7}
           zoomControl={false}
+          // Leaflet's default shift+drag draws a zoom-to-rectangle box —
+          // disabled so the same gesture can instead draw an alerts region
+          // selection (see AlertsBoundsController below).
+          boxZoom={false}
           className="h-full w-full"
           style={{ background: "var(--bg)" }}
           attributionControl
@@ -564,6 +726,7 @@ export function LeafletRadarMap({
           <Marker position={[lat, lon]} icon={locationIcon} />
           <RecenterOnLocationChange lat={lat} lon={lon} />
           <InvalidateSizeOnResize />
+          <AlertsBoundsController lat={lat} lon={lon} onBoundsChange={onBoundsChange} />
           {selectedStation && (
             <>
               <FlyToStation lat={selectedStation.lat} lon={selectedStation.lon} />

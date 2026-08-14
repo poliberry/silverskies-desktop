@@ -7,7 +7,11 @@ import { fetchLibreWxrAlerts, type BBox } from "./librewxr";
 import { fetchNwsAlerts } from "./nws";
 import { fetchSpcMdAlerts } from "./spc-md";
 
-const SEVERITY_RANK: Record<string, number> = {
+// Exported so other callers merging additional alert feeds outside
+// fetchMergedAlerts (e.g. useAlertsForBounds, combining this with the
+// bbox-native LibreWXR/SPC-MD feeds) can sort their own combined list the
+// same way, instead of re-deriving the rank table.
+export const SEVERITY_RANK: Record<string, number> = {
   Extreme: 0,
   Severe: 1,
   Moderate: 2,

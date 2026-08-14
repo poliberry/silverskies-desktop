@@ -13,6 +13,7 @@ import { useSavedLocations } from "@/hooks/useSavedLocations";
 import { useSettings } from "@/hooks/useSettings";
 import { useWeather } from "@/hooks/useWeather";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useAlertsForBounds } from "@/hooks/useAlertsForBounds";
 import { useSpcOutlook } from "@/hooks/useSpcOutlook";
 import { useRadarSettings } from "@/hooks/useRadarSettings";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
@@ -30,6 +31,7 @@ import { buildTodayOutlook } from "@/lib/forecast-outlook";
 import { ProviderConfigError } from "@/lib/providers";
 import type { NormalizedAlert } from "@/types/alerts";
 import type { UnitPref } from "@/types/settings";
+import type { BBox } from "@/lib/alerts/librewxr";
 
 export function Shell() {
   const { config, updateConfig } = useSettings();
@@ -38,7 +40,39 @@ export function Shell() {
     useActiveLocation();
 
   const weatherQuery = useWeather(active);
+  // Point-based, for the active/searched location — drives the severe-pulse
+  // glow, favicon, and taskbar badge below, all of which are meant to track
+  // "the location I'm looking at," not wherever the radar map happens to be
+  // panned to at the moment. The audit log itself uses a separate,
+  // bbox-based query (see radarBounds/boundsAlertsQuery below) so panning
+  // the radar around doesn't also make the whole window pulse for whatever
+  // happens to be on screen.
   const alertsQuery = useAlerts(active?.lat ?? null, active?.lon ?? null);
+  // The docked radar's own current viewport (or its active shift-drag
+  // selection), reported by RadarMap's onBoundsChange below — or, when the
+  // radar is popped out instead, relayed here over IPC under the "main"
+  // sentinel from that pop-out's own RadarWindow (see RadarWindow.tsx's
+  // boundsInstanceId). Feeds the audit log so it always reflects whatever's
+  // actually visible on "the radar," docked or not.
+  const [radarBounds, setRadarBounds] = useState<BBox | null>(null);
+  useEffect(() => ipc.windows.onInstanceBounds(setRadarBounds), []);
+  // Covers the case where the primary radar was already popped out (and had
+  // already reported its own bbox) before Shell (re)mounted — a reload, or a
+  // pop-out restored from session.json on relaunch — so onInstanceBounds'
+  // live-only relay alone would leave this at null until the next pan/zoom.
+  // When the radar is docked instead, RadarMap's own onBoundsChange below
+  // reports its bbox directly on mount, so this is a harmless no-op there.
+  useEffect(() => {
+    let cancelled = false;
+    void ipc.windows.getInstanceBounds("main").then((cached) => {
+      if (cancelled || !cached) return;
+      setRadarBounds((current) => current ?? cached);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const boundsAlertsQuery = useAlertsForBounds(radarBounds);
   const spcOutlookEnabled = config?.spcOutlookEnabled ?? true;
   const spcOutlookQuery = useSpcOutlook(spcOutlookEnabled);
   // The main window's own docked radar instance — a pop-out radar window
@@ -240,6 +274,20 @@ export function Shell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.lat, active?.lon, active?.label]);
 
+  // Feeds both the docked audit log (local state) and any "main"-paired
+  // audit-log pop-out (via the same IPC channel a popped-out primary radar
+  // already uses for its own bounds) — without the relay, popping out only
+  // the audit log while the radar stays docked would leave that window
+  // stuck on whatever bounds it opened with (or none at all), since nothing
+  // else ever tells it the docked radar panned or drew a selection. Also
+  // keeps main's latestBoundsByInstance cache current for "main" so a
+  // *later*-opened audit-log window can catch up immediately instead of
+  // waiting for the next pan/zoom (see windows:getInstanceBounds).
+  function handleRadarBoundsChange(bounds: BBox) {
+    setRadarBounds(bounds);
+    ipc.windows.sendInstanceBounds("main", bounds);
+  }
+
   function handlePopOutAuditLog() {
     if (auditLogPoppedOut || popoutAuditLogRequestInFlightRef.current) return;
     popoutAuditLogRequestInFlightRef.current = true;
@@ -255,8 +303,15 @@ export function Shell() {
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: "var(--bg)" }}>
       {/* Only the main window gets the animated gradient sweep — pop-out
           radar/conditions/alert windows render their own root component
-          instead of Shell, so they never pick this up. */}
-      <div id="top-glow" />
+          instead of Shell, so they never pick this up. Settings → General →
+          "Top Glow Sweep" hides it via CSS instead of conditionally
+          rendering it — useSeverePulse imperatively sets this element's
+          "pulsing" class/--tg color from its own effect, which only reruns
+          when the pulse color/theme change, not when this setting does; if
+          the div were unmounted while disabled, re-enabling it mid-alert
+          would remount a fresh element with neither, silently dropping the
+          pulse until the color happened to change again. */}
+      <div id="top-glow" className={config?.topGlowEnabled ?? true ? undefined : "top-glow-disabled"} />
       <div style={{ padding: "12px 12px 0" }}>
         <TopBar
           locationLabel={active?.label ?? "—"}
@@ -270,6 +325,12 @@ export function Shell() {
           onRefresh={() => {
             void weatherQuery.refetch();
             void alertsQuery.refetch();
+            // react-query's refetch() runs the queryFn even when `enabled`
+            // is false — useAlertsForBounds' queryFn indexes straight into
+            // the bbox tuple, so calling this before the radar has ever
+            // reported bounds would throw on a null bbox instead of just
+            // no-op'ing like the `enabled` guard implies.
+            if (radarBounds) void boundsAlertsQuery.refetch();
           }}
           unit={unit}
           onSetUnit={(u) => updateConfig({ units: u })}
@@ -322,6 +383,7 @@ export function Shell() {
                   preloadLocations={savedLocations}
                   spcOutlookEnabled={spcOutlookEnabled}
                   settings={radarSettings}
+                  onBoundsChange={handleRadarBoundsChange}
                 />
               )}
             </div>
@@ -331,8 +393,8 @@ export function Shell() {
           {auditLogPoppedOut === false && (
             <div className="glass-card min-h-0 p-3" style={{ flex: radarPoppedOut === false ? "1 1 0%" : "1 1 100%" }}>
               <AlertLog
-                alerts={alertsQuery.data ?? []}
-                isLoading={alertsQuery.isLoading}
+                alerts={boundsAlertsQuery.data ?? []}
+                isLoading={boundsAlertsQuery.isLoading}
                 demoAlerts={demoAlerts}
                 todayOutlook={todayOutlook}
                 spcOutlook={spcOutlook}

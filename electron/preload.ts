@@ -3,6 +3,7 @@ import type {
   AppInfo,
   ConfigFile,
   LocationsFile,
+  MapViewBounds,
   SavedLocation,
   UpdaterStatus,
   WindowLocation,
@@ -77,6 +78,22 @@ const api = {
       ipcRenderer.on("windows:instanceLocation", listener);
       return () => ipcRenderer.removeListener("windows:instanceLocation", listener);
     },
+    // Same fire-and-forget shape as sendInstanceLocation/onInstanceLocation
+    // above, for a radar instance's current map viewport (or an active
+    // shift-drag selection within it) instead of its lat/lon — powers the
+    // paired audit-log window's "alerts for what's on screen" view.
+    sendInstanceBounds: (instanceId: string, bounds: MapViewBounds): void =>
+      ipcRenderer.send("windows:instanceBoundsChanged", instanceId, bounds),
+    onInstanceBounds: (callback: (bounds: MapViewBounds) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, bounds: MapViewBounds) => callback(bounds);
+      ipcRenderer.on("windows:instanceBounds", listener);
+      return () => ipcRenderer.removeListener("windows:instanceBounds", listener);
+    },
+    // Catches a newly (re)mounted window up on whatever bbox its paired
+    // radar instance already reported before it existed — onInstanceBounds
+    // above only ever delivers *future* updates.
+    getInstanceBounds: (instanceId: string): Promise<MapViewBounds | null> =>
+      ipcRenderer.invoke("windows:getInstanceBounds", instanceId),
     // Fires when the one radar window that undocked the main window's own
     // radar (opened via openRadar({isPrimaryPopout:true})) closes, so Shell
     // knows to redock.
