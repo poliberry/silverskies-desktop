@@ -279,8 +279,6 @@ export function Shell() {
           radarPoppedOut={radarPoppedOut === true}
           onPopOutRadar={handlePopOutRadar}
           onNewRadarWindow={handleNewRadarWindow}
-          auditLogPoppedOut={auditLogPoppedOut === true}
-          onPopOutAuditLog={handlePopOutAuditLog}
         />
       </div>
 
@@ -338,6 +336,7 @@ export function Shell() {
                 demoAlerts={demoAlerts}
                 todayOutlook={todayOutlook}
                 spcOutlook={spcOutlook}
+                onPopOutAuditLog={isAdvancedUi ? handlePopOutAuditLog : undefined}
               />
             </div>
           )}

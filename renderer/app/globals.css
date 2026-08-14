@@ -409,6 +409,24 @@ body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
 .alert-nws-link { display: inline-block; margin-top: 8px; font-size: 0.7rem; letter-spacing: 0.08em; color: var(--text3); text-decoration: none; transition: color 0.15s; }
 .alert-nws-link:hover { color: var(--text); }
 
+/* ── Alert log rows — single-line variant of the banner above ───────────
+   Same --ac-driven coloring/icon as .alert-banner, but a flat one-line row
+   (no card border/background) so the audit log reads as a list, matching
+   TodayOutlookRow's single-line treatment instead of stacking a card per
+   alert. */
+.alert-line { display: flex; align-items: center; width: 100%; min-width: 0; gap: 8px; padding: 4px 1px; margin: 0; border: none; background: none; font: inherit; font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.03em; text-align: left; color: var(--ac, #888); cursor: pointer; }
+.alert-line:hover { filter: brightness(1.18); }
+.alert-line-icon { display: flex; align-items: center; flex-shrink: 0; }
+.alert-line-icon svg { width: 16px; height: 16px; stroke: var(--ac, currentColor); flex-shrink: 0; }
+.alert-line-title { font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; flex-shrink: 0; }
+.alert-line-meta { opacity: 0.75; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alert-line-arrow { font-size: 0.72rem; opacity: 0.5; flex-shrink: 0; }
+.alert-line-popout {
+  flex-shrink: 0; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; color: var(--ac, #888); opacity: 0.7; cursor: pointer; transition: opacity 0.15s;
+}
+.alert-line-popout:hover { opacity: 1; }
+
 /* Per-product / severity color tiers via --ac — full taxonomy ported
    from the original app; see lib/alerts/classify.ts for the JS side. */
 .alert-tornado-emergency { --ac: #8a0ba5; }

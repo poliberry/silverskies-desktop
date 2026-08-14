@@ -19,7 +19,7 @@ export function AlertRow({ alert }: { alert: NormalizedAlert }) {
       : alert.expires
         ? `Until ${fmtTime(alert.expires)}`
         : "";
-  const meta = [duration, alert.areaDesc].filter(Boolean).join(" · ");
+  const meta = [duration, alert.issuingOffice || alert.source.toUpperCase()].filter(Boolean).join(" · ");
   const iconName = alertIconName(alert.event);
 
   function openInWindow() {
@@ -28,51 +28,26 @@ export function AlertRow({ alert }: { alert: NormalizedAlert }) {
 
   return (
     <Dialog>
-      {/* A single .alert-banner carries the visual style (border/background/
-          radius) — the trigger and the pop-out button inside it are plain,
-          unstyled flex children, not each their own .alert-banner, so the
-          background/border don't stack twice. */}
-      <div className={`alert-banner ${alert.cssClass}`} style={{ display: "flex", alignItems: "stretch", padding: 0 }}>
+      {/* One flat, single-line row (name · time · issuing office) instead of
+          a stacked banner card — `alert.cssClass` still just sets --ac here,
+          so the trigger and pop-out button both pick up the severity color
+          without either needing its own background/border chrome. */}
+      <div className={`flex items-center gap-1 ${alert.cssClass}`}>
         <DialogTrigger
           render={
-            <button
-              type="button"
-              style={{
-                flex: 1,
-                minWidth: 0,
-                background: "none",
-                border: "none",
-                padding: 0,
-                textAlign: "left",
-                font: "inherit",
-                color: "inherit",
-                cursor: "pointer",
-              }}
-            >
-              <div className="alert-banner-row">
-                <div className="alert-icon">
-                  <i className={`ph ph-${iconName} alert-mc-icon`} aria-hidden="true" />
-                </div>
-                <div className="alert-body">
-                  <div className="alert-title">{alert.displayEvent}</div>
-                  <div className="alert-duration">{meta || alert.source.toUpperCase()}</div>
-                </div>
-                <div className="alert-arrow">▸</div>
-              </div>
+            <button type="button" className="alert-line" style={{ flex: 1 }}>
+              <span className="alert-line-icon">
+                <i className={`ph ph-${iconName} alert-mc-icon`} aria-hidden="true" />
+              </span>
+              <span className="alert-line-title">{alert.displayEvent}</span>
+              <span className="alert-line-meta">{meta}</span>
+              <span className="alert-line-arrow">▸</span>
             </button>
           }
         />
         <button
           type="button"
-          style={{
-            flexShrink: 0,
-            width: 36,
-            background: "none",
-            border: "none",
-            borderLeft: "1px solid color-mix(in srgb, var(--ac, #888) 30%, transparent)",
-            color: "inherit",
-            cursor: "pointer",
-          }}
+          className="alert-line-popout"
           title="Open this alert in its own window"
           aria-label="Open this alert in its own window"
           onClick={(e) => {

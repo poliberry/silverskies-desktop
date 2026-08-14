@@ -87,6 +87,25 @@ function RecenterOnLocationChange({ lat, lon }: { lat: number; lon: number }) {
   return null;
 }
 
+/** Leaflet caches its container's pixel size at init time and never re-reads
+ * it on its own — a flex-driven resize (e.g. the radar's own container
+ * growing to fill the column when the audit log pops out, or shrinking back
+ * when it redocks) doesn't fire a window `resize` event, so without this the
+ * map keeps rendering tiles/controls sized to whatever the container
+ * happened to be when it first became visible, leaving the newly revealed
+ * area blank until something else (a manual window resize) forces a
+ * recalculation. */
+function InvalidateSizeOnResize() {
+  const map = useMap();
+  useEffect(() => {
+    const container = map.getContainer();
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [map]);
+  return null;
+}
+
 /** Flies to a newly-selected station once (not on every re-render while it
  * stays selected, e.g. a metadata refetch) so the station is actually in
  * view without the user having to pan there manually. */
@@ -544,6 +563,7 @@ export function LeafletRadarMap({
           {settings.showRadarStations && <RadarStationsLayer onSelect={handleSelectStation} />}
           <Marker position={[lat, lon]} icon={locationIcon} />
           <RecenterOnLocationChange lat={lat} lon={lon} />
+          <InvalidateSizeOnResize />
           {selectedStation && (
             <>
               <FlyToStation lat={selectedStation.lat} lon={selectedStation.lon} />

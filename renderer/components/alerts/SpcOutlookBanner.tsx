@@ -17,7 +17,7 @@ const SOURCE_URL = "https://www.spc.noaa.gov/products/outlook/day1otlk.html";
 /**
  * SPC Day 1 Categorical Outlook banner — only rendered when the active
  * location falls inside a risk polygon (see findOutlookAtPoint). Reuses the
- * same `.alert-banner`/modal chrome as AlertRow for a consistent feel, but
+ * same `.alert-line` row/modal chrome as AlertRow for a consistent feel, but
  * deliberately shows just the risk name behind a fixed lightning icon, not
  * the full alert metadata (area/duration text etc.) real alerts carry —
  * this isn't a NormalizedAlert, just today's outlook category. The accent
@@ -33,17 +33,13 @@ export function SpcOutlookBanner({ outlook }: { outlook: SpcOutlookFeature }) {
     <Dialog>
       <DialogTrigger
         render={
-          <button type="button" className="alert-banner" style={accent}>
-            <div className="alert-banner-row">
-              <div className="alert-icon">
-                <i className="ph ph-lightning alert-mc-icon" aria-hidden="true" />
-              </div>
-              <div className="alert-body">
-                <div className="alert-title">{outlook.name}</div>
-                <div className="alert-duration">SPC Day 1 Outlook · {duration}</div>
-              </div>
-              <div className="alert-arrow">▸</div>
-            </div>
+          <button type="button" className="alert-line" style={accent}>
+            <span className="alert-line-icon">
+              <i className="ph ph-lightning alert-mc-icon" aria-hidden="true" />
+            </span>
+            <span className="alert-line-title">{outlook.name}</span>
+            <span className="alert-line-meta">SPC Day 1 Outlook · {duration}</span>
+            <span className="alert-line-arrow">▸</span>
           </button>
         }
       />
