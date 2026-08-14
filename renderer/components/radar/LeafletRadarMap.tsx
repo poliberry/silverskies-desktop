@@ -137,7 +137,25 @@ function AlertsBoundsController({
   const [dragStart, setDragStart] = useState<L.LatLng | null>(null);
   const [dragCurrent, setDragCurrent] = useState<L.LatLng | null>(null);
 
-  useEffect(() => setSelection(null), [lat, lon]);
+  // Also cancels any drag still in progress and re-enables map.dragging —
+  // without that, a location change mid-drag (search, saved-location click,
+  // GPS fix, all of which fly the map elsewhere via RecenterOnLocationChange)
+  // would otherwise leave dragging disabled until the eventual mouseup, which
+  // would then compute a bogus selection spanning the old location's
+  // drag-start point and wherever the pointer happened to end up over the
+  // new one, filtering the new location's alerts against a meaningless box.
+  useEffect(() => {
+    if (dragStart) {
+      map.dragging.enable();
+      setDragStart(null);
+      setDragCurrent(null);
+    }
+    setSelection(null);
+    // Deliberately keyed on [lat, lon] alone — this should only fire when
+    // the active location actually changes, not on every drag start/end
+    // (which already manage `map`/`dragStart` themselves).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lon]);
 
   // Escape clears an active selection (or cancels one still mid-drag)
   // regardless of whether the map itself has focus — the same global-ish

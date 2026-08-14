@@ -274,6 +274,20 @@ export function Shell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.lat, active?.lon, active?.label]);
 
+  // Feeds both the docked audit log (local state) and any "main"-paired
+  // audit-log pop-out (via the same IPC channel a popped-out primary radar
+  // already uses for its own bounds) — without the relay, popping out only
+  // the audit log while the radar stays docked would leave that window
+  // stuck on whatever bounds it opened with (or none at all), since nothing
+  // else ever tells it the docked radar panned or drew a selection. Also
+  // keeps main's latestBoundsByInstance cache current for "main" so a
+  // *later*-opened audit-log window can catch up immediately instead of
+  // waiting for the next pan/zoom (see windows:getInstanceBounds).
+  function handleRadarBoundsChange(bounds: BBox) {
+    setRadarBounds(bounds);
+    ipc.windows.sendInstanceBounds("main", bounds);
+  }
+
   function handlePopOutAuditLog() {
     if (auditLogPoppedOut || popoutAuditLogRequestInFlightRef.current) return;
     popoutAuditLogRequestInFlightRef.current = true;
@@ -369,7 +383,7 @@ export function Shell() {
                   preloadLocations={savedLocations}
                   spcOutlookEnabled={spcOutlookEnabled}
                   settings={radarSettings}
-                  onBoundsChange={setRadarBounds}
+                  onBoundsChange={handleRadarBoundsChange}
                 />
               )}
             </div>
