@@ -105,6 +105,10 @@ interface AlertLogProps {
    * in Advanced UI mode) — omitted entirely inside AuditLogWindow, which is
    * already the popped-out instance and has nowhere further to pop out to. */
   onPopOutAuditLog?: () => void;
+  /** Rendered at the start of the header row — the main window's bento
+   * tile puts its drag grip here instead of stacking a second header. */
+  headerLeading?: React.ReactNode;
+  headerClassName?: string;
 }
 
 export function AlertLog({
@@ -114,6 +118,8 @@ export function AlertLog({
   todayOutlook,
   spcOutlook,
   onPopOutAuditLog,
+  headerLeading,
+  headerClassName,
 }: AlertLogProps) {
   const [severityFilter, setSeverityFilter] = useState<Set<string>>(new Set());
   const [sourceFilter, setSourceFilter] = useState<Set<AlertSource>>(new Set());
@@ -156,7 +162,8 @@ export function AlertLog({
 
   return (
     <div className="flex h-full flex-col gap-2">
-      <div className="flex items-center gap-3 px-1">
+      <div className={`flex items-center gap-3 px-1 ${headerClassName ?? ""}`}>
+        {headerLeading}
         <div className="section-title">
           Audit Log
           {filtered.length > 0 && <span className="section-title-count"> ({filtered.length})</span>}

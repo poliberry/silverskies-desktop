@@ -21,6 +21,10 @@ export type ThemePref = "system" | "light" | "dark";
 /** "classic" is today's single-window layout. "advanced" surfaces the
  * radar-window pop-out/multi-instance affordances in Shell and enables
  * session-restore of pop-out windows on launch (see electron/main.ts). */
+/** Built-in synthesized notification sounds, "custom" (a user-supplied
+ * audio file, stored renderer-side), or "none". */
+export type NotificationSoundId = "none" | "chime" | "ping" | "bell" | "attention" | "siren" | "klaxon" | "custom";
+
 export type UiModePref = "classic" | "advanced";
 
 export interface ConfigFile {
@@ -41,6 +45,16 @@ export interface ConfigFile {
   /** Desktop toast notifications for new alerts, notable forecasts, and
    * heads-up severe-weather warnings across saved locations. */
   notificationsEnabled: boolean;
+  /** Extreme/Severe alerts open an always-on-top pop-up window instead of
+   * a regular desktop notification — see AlertPopupWindow. */
+  alertPopupsEnabled: boolean;
+  /** Sound for desktop notifications (alerts below Severe, forecast
+   * heads-ups) — see renderer/lib/notifications/sounds.ts. */
+  notificationSoundAdvisory: NotificationSoundId;
+  /** Sound for the Severe/Extreme alert pop-up. */
+  notificationSoundSevere: NotificationSoundId;
+  /** 0–1. */
+  notificationVolume: number;
   /** SPC Day 1 Categorical Convective Outlook — radar outline overlay plus
    * an alerts-panel banner when the active location falls inside a risk
    * category. */
@@ -49,6 +63,9 @@ export interface ConfigFile {
    * decorative, so it's the one visual toggle that lives in General rather
    * than tied to any particular data feed. */
   topGlowEnabled: boolean;
+  /** @deprecated No longer read — every pop-out affordance is always
+   * available now that any bento tile can be popped out on its own. Kept
+   * so existing config.json files still type-check. */
   uiMode: UiModePref;
   /** Per alert-type (keyed by the `cssClass` taxonomy from
    * renderer/lib/alerts/classify.ts) visibility/color overrides for the
@@ -92,7 +109,19 @@ export interface ThemeDefinition {
  * own independent radar/conditions/audit-log state (see electron/main.ts's
  * window registry). "alert" windows are transient (token handoff only) and
  * are never persisted to SessionFile. */
-export type WindowRole = "main" | "radar" | "conditions" | "alert" | "auditLog" | "browser" | "weatherRadio";
+export type WindowRole =
+  | "main"
+  | "radar"
+  | "conditions"
+  | "alert"
+  | "auditLog"
+  | "browser"
+  | "weatherRadio"
+  // A Severe/Extreme alert's always-on-top pop-up — transient, like "alert".
+  | "alertPopup"
+  // A single bento tile popped out of the main window's canvas — see
+  // windows:openTile in main.ts. Always paired to the "main" sentinel.
+  | "tile";
 
 export interface WindowLocation {
   lat: number;
@@ -129,6 +158,8 @@ export interface SessionWindowEntry {
    * popout" on relaunch so Shell knows to stay undocked instead of
    * resetting to docked on the next launch/refresh. */
   isPrimaryPopout?: boolean;
+  /** Only for role "tile" — which bento tile the window shows. */
+  tileId?: string;
   location?: WindowLocation | null;
   bounds?: WindowBoundsRect;
 }
@@ -177,6 +208,10 @@ export const DEFAULT_CONFIG: ConfigFile = {
   autoRefreshMinutes: 30,
   devToolsEnabled: false,
   notificationsEnabled: true,
+  alertPopupsEnabled: true,
+  notificationSoundAdvisory: "chime",
+  notificationSoundSevere: "attention",
+  notificationVolume: 0.8,
   spcOutlookEnabled: true,
   topGlowEnabled: true,
   uiMode: "classic",

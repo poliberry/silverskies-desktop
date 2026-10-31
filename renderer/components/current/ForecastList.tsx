@@ -1,6 +1,6 @@
 "use client";
 
-import { wmoPhosphorName } from "@/lib/icons/wmo";
+import { WeatherIcon } from "@/components/icons/WeatherIcon";
 import { fmtDayLabel, fmtTemp } from "@/lib/units";
 import type { DailyPoint } from "@/types/weather";
 import type { UnitPref } from "@/types/settings";
@@ -26,7 +26,7 @@ export function ForecastList({ daily, unit }: { daily: DailyPoint[]; unit: UnitP
           <div key={d.date} className={`forecast-row ${i === 0 ? "today" : ""}`}>
             <div className="forecast-day">{fmtDayLabel(d.date, i)}</div>
             <div className="forecast-icon">
-              <i className={`ph ph-${wmoPhosphorName(d.weatherCode, true)} forecast-icon-glyph`} aria-hidden="true" />
+              <WeatherIcon code={d.weatherCode} isDay size={22} />
             </div>
             <div>
               <div className="temp-bar-bg">

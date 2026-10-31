@@ -1,7 +1,7 @@
 import type { ConfigFile, LocationsFile, SavedLocation } from "./settings";
 import type { AppInfo, UpdaterStatus } from "./updater";
-import type { BrowserWindowState, MapViewBounds, WindowLocation } from "./windows";
-import type { NormalizedAlert } from "./alerts";
+import type { BrowserWindowState, MapViewBounds, WindowBoundsRect, WindowLocation } from "./windows";
+import type { AlertPopupPayload, NormalizedAlert } from "./alerts";
 
 // Mirrors the shape contextBridge.exposeInMainWorld("silverSkies", ...)
 // exposes from electron/preload.ts. Kept as a separate declaration since
@@ -23,7 +23,7 @@ export interface SilverSkiesApi {
     getInfo(): Promise<AppInfo>;
     openExternal(url: string): Promise<void>;
     setOverlayIcon(dataUrl: string | null, description: string): Promise<void>;
-    notify(title: string, body: string): Promise<void>;
+    notify(title: string, body: string, opts?: { silent?: boolean }): Promise<void>;
   };
   updater: {
     check(): Promise<void>;
@@ -46,6 +46,7 @@ export interface SilverSkiesApi {
     }): Promise<void>;
     openAlert(alert: NormalizedAlert): Promise<void>;
     getAlertPayload(token: string): Promise<NormalizedAlert | null>;
+    openAlertPopup(alertId: string, payload: AlertPopupPayload): Promise<void>;
     sendInstanceLocation(instanceId: string, location: WindowLocation): void;
     onInstanceLocation(callback: (location: WindowLocation) => void): () => void;
     sendInstanceBounds(instanceId: string, bounds: MapViewBounds): void;
@@ -55,6 +56,10 @@ export interface SilverSkiesApi {
     isPrimaryRadarOpen(): Promise<boolean>;
     onPrimaryAuditLogClosed(callback: () => void): () => void;
     isPrimaryAuditLogOpen(): Promise<boolean>;
+    openTile(opts: { tileId: string; location?: WindowLocation | null; bounds?: WindowBoundsRect }): Promise<void>;
+    closeTile(tileId: string): Promise<void>;
+    getOpenTiles(): Promise<string[]>;
+    onTileClosed(callback: (tileId: string) => void): () => void;
     openBrowser(opts: { url: string; title?: string }): Promise<void>;
     openWeatherRadio(opts: { instanceId: string; location?: WindowLocation | null }): Promise<void>;
   };

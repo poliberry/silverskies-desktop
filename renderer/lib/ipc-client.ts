@@ -1,7 +1,7 @@
 import type { ConfigFile, LocationsFile, SavedLocation } from "@/types/settings";
 import type { AppInfo, UpdaterStatus } from "@/types/updater";
-import type { BrowserWindowState, MapViewBounds, WindowLocation } from "@/types/windows";
-import type { NormalizedAlert } from "@/types/alerts";
+import type { BrowserWindowState, MapViewBounds, WindowBoundsRect, WindowLocation } from "@/types/windows";
+import type { AlertPopupPayload, NormalizedAlert } from "@/types/alerts";
 import "@/types/ipc";
 
 const DEFAULT_APP_INFO: AppInfo = { version: "dev", electron: "-", chrome: "-", node: "-", platform: "-", arch: "-" };
@@ -20,6 +20,10 @@ const DEFAULT_CONFIG: ConfigFile = {
   autoRefreshMinutes: 30,
   devToolsEnabled: false,
   notificationsEnabled: true,
+  alertPopupsEnabled: true,
+  notificationSoundAdvisory: "chime",
+  notificationSoundSevere: "attention",
+  notificationVolume: 0.8,
   spcOutlookEnabled: true,
   topGlowEnabled: true,
   uiMode: "classic",
@@ -96,7 +100,7 @@ export const ipc = {
       if (!window.silverSkies) return;
       return window.silverSkies.app.setOverlayIcon(dataUrl, description);
     },
-    async notify(title: string, body: string): Promise<void> {
+    async notify(title: string, body: string, opts?: { silent?: boolean }): Promise<void> {
       if (!window.silverSkies) {
         // Browser-preview fallback (outside Electron) — the Notification
         // Web API mirrors Electron's closely enough to reuse the same call
@@ -106,7 +110,7 @@ export const ipc = {
         }
         return;
       }
-      return window.silverSkies.app.notify(title, body);
+      return window.silverSkies.app.notify(title, body, opts);
     },
   },
   updater: {
@@ -165,6 +169,16 @@ export const ipc = {
       if (!window.silverSkies) return null;
       return window.silverSkies.windows.getAlertPayload(token);
     },
+    /** The alert-popup window's payload — same token handoff as
+     * getAlertPayload, just a different shape. */
+    async getAlertPopupPayload(token: string): Promise<AlertPopupPayload | null> {
+      if (!window.silverSkies) return null;
+      return (await window.silverSkies.windows.getAlertPayload(token)) as unknown as AlertPopupPayload | null;
+    },
+    async openAlertPopup(alertId: string, payload: AlertPopupPayload): Promise<void> {
+      if (!window.silverSkies) { warnNoBridge(); return; }
+      return window.silverSkies.windows.openAlertPopup(alertId, payload);
+    },
     sendInstanceLocation(instanceId: string, location: WindowLocation): void {
       if (!window.silverSkies) return;
       window.silverSkies.windows.sendInstanceLocation(instanceId, location);
@@ -200,6 +214,26 @@ export const ipc = {
     async isPrimaryAuditLogOpen(): Promise<boolean> {
       if (!window.silverSkies) return false;
       return window.silverSkies.windows.isPrimaryAuditLogOpen();
+    },
+    async openTile(opts: {
+      tileId: string;
+      location?: WindowLocation | null;
+      bounds?: WindowBoundsRect;
+    }): Promise<void> {
+      if (!window.silverSkies) { warnNoBridge(); return; }
+      return window.silverSkies.windows.openTile(opts);
+    },
+    async closeTile(tileId: string): Promise<void> {
+      if (!window.silverSkies) return;
+      return window.silverSkies.windows.closeTile(tileId);
+    },
+    async getOpenTiles(): Promise<string[]> {
+      if (!window.silverSkies) return [];
+      return window.silverSkies.windows.getOpenTiles();
+    },
+    onTileClosed(callback: (tileId: string) => void): () => void {
+      if (!window.silverSkies) return () => {};
+      return window.silverSkies.windows.onTileClosed(callback);
     },
     async openBrowser(opts: { url: string; title?: string }): Promise<void> {
       if (!window.silverSkies) { warnNoBridge(); return; }

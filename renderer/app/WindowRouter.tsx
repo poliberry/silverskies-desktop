@@ -8,9 +8,13 @@ import { AuditLogWindow } from "@/components/audit-log-window/AuditLogWindow";
 import { AlertWindow } from "@/components/alert-window/AlertWindow";
 import { BrowserWindowChrome } from "@/components/browser-window/BrowserWindowChrome";
 import { WeatherRadioWindow } from "@/components/weather-radio-window/WeatherRadioWindow";
+import { TileWindow } from "@/components/tile-window/TileWindow";
+import { AlertPopupWindow } from "@/components/alert-popup-window/AlertPopupWindow";
+import { isBentoTileId } from "@/lib/bento-layout";
 import type { WindowLocation } from "@/types/windows";
+import { ipc } from "@/lib/ipc-client";
 
-type ParsedRole = "main" | "radar" | "conditions" | "alert" | "auditLog" | "browser" | "weatherRadio";
+type ParsedRole = "main" | "radar" | "conditions" | "alert" | "auditLog" | "browser" | "weatherRadio" | "tile" | "alertPopup";
 
 interface ParsedWindowParams {
   role: ParsedRole;
@@ -21,6 +25,7 @@ interface ParsedWindowParams {
   isPrimaryPopout: boolean;
   url: string | null;
   title: string | null;
+  tile: string | null;
 }
 
 function parseWindowParams(): ParsedWindowParams {
@@ -32,7 +37,9 @@ function parseWindowParams(): ParsedWindowParams {
     rawRole === "alert" ||
     rawRole === "auditLog" ||
     rawRole === "browser" ||
-    rawRole === "weatherRadio"
+    rawRole === "weatherRadio" ||
+    rawRole === "tile" ||
+    rawRole === "alertPopup"
       ? rawRole
       : "main";
   const lat = params.get("lat");
@@ -48,6 +55,7 @@ function parseWindowParams(): ParsedWindowParams {
     isPrimaryPopout: params.get("isPrimaryPopout") === "1",
     url: params.get("url"),
     title: params.get("title"),
+    tile: params.get("tile"),
   };
 }
 
@@ -89,8 +97,18 @@ export function WindowRouter() {
       );
     case "alert":
       return <AlertWindow token={params.token ?? ""} />;
+    case "alertPopup":
+      return <AlertPopupWindow token={params.token ?? ""} />;
     case "browser":
       return <BrowserWindowChrome url={params.url ?? ""} title={params.title} />;
+    case "tile":
+      // An unknown tile id (e.g. a session.json entry from a newer build)
+      // has nothing to render — close rather than show an empty window.
+      if (!params.tile || !isBentoTileId(params.tile)) {
+        void ipc.windowControls.close();
+        return null;
+      }
+      return <TileWindow tileId={params.tile} initialLocation={params.location} />;
     case "weatherRadio":
       return <WeatherRadioWindow initialLocation={params.location} />;
     default:

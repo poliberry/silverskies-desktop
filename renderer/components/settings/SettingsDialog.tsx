@@ -18,8 +18,9 @@ import { DevToolsPanel } from "./DevToolsPanel";
 import { AlertTypesPanel } from "./AlertTypesPanel";
 import { ThemesPanel } from "./ThemesPanel";
 import { WeatherRadioPanel } from "./WeatherRadioPanel";
+import { NotificationsPanel } from "./NotificationsPanel";
 import type { NormalizedAlert } from "@/types/alerts";
-import type { ThemePref, TimeFormatPref, UiModePref, UnitPref, WeatherProviderId } from "@/types/settings";
+import type { ThemePref, TimeFormatPref, UnitPref, WeatherProviderId } from "@/types/settings";
 import type { WindowLocation } from "@/types/windows";
 
 const REFRESH_OPTIONS = [
@@ -31,7 +32,7 @@ const REFRESH_OPTIONS = [
   { label: "OFF", value: 0 },
 ];
 
-const TAB_TRIGGER_CLASS = "font-mono text-[0.7rem] tracking-wider uppercase";
+const TAB_TRIGGER_CLASS = "shrink-0 font-mono text-[0.7rem] tracking-wider uppercase";
 
 export interface SettingsDialogProps {
   demoAlerts: NormalizedAlert[];
@@ -75,14 +76,19 @@ export function SettingsDialog({
           </Button>
         }
       />
-      <DialogContent className="max-h-[85vh] overflow-y-auto thin-scroll rounded-none sm:max-w-lg" initialFocus={false}>
+      <DialogContent className="max-h-[85vh] overflow-x-hidden overflow-y-auto thin-scroll rounded-none sm:max-w-lg" initialFocus={false}>
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>Weather provider, units, appearance, and refresh behavior.</DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="general">
-          <TabsList variant="line" className="w-full justify-start border-b" style={{ borderColor: "var(--border)" }}>
+        <Tabs defaultValue="general" className="min-w-0">
+          <TabsList
+            variant="line"
+            // Eight tabs outgrow the dialog — scroll the strip, not the dialog.
+            className="thin-scroll w-full min-w-0 justify-start overflow-x-auto border-b"
+            style={{ borderColor: "var(--border)" }}
+          >
             <TabsTrigger value="general" className={TAB_TRIGGER_CLASS}>
               General
             </TabsTrigger>
@@ -91,6 +97,9 @@ export function SettingsDialog({
             </TabsTrigger>
             <TabsTrigger value="alerts" className={TAB_TRIGGER_CLASS}>
               Alerts
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className={TAB_TRIGGER_CLASS}>
+              Notifications
             </TabsTrigger>
             <TabsTrigger value="radio" className={TAB_TRIGGER_CLASS}>
               Radio
@@ -195,50 +204,6 @@ export function SettingsDialog({
             </div>
 
             <div className="settings-bar-section">
-              <div className="settings-bar-label">NOTIFICATIONS</div>
-              <div className="settings-bar-group">
-                <button
-                  className={`unit-btn ${config.notificationsEnabled ? "active" : ""}`}
-                  onClick={() => updateConfig({ notificationsEnabled: true })}
-                >
-                  ON
-                </button>
-                <button
-                  className={`unit-btn ${!config.notificationsEnabled ? "active" : ""}`}
-                  onClick={() => updateConfig({ notificationsEnabled: false })}
-                >
-                  OFF
-                </button>
-              </div>
-              <p className="font-mono text-[0.68rem]" style={{ color: "var(--text3)" }}>
-                Desktop toasts for new alerts, notable next-day forecasts, and heads-up severe weather —
-                checked across all of your saved locations, not just the one on screen.
-              </p>
-            </div>
-
-            <div className="settings-bar-section">
-              <div className="settings-bar-label">INTERFACE</div>
-              <div className="settings-bar-group">
-                {(["classic", "advanced"] as UiModePref[]).map((m) => (
-                  <button
-                    key={m}
-                    className={`unit-btn ${config.uiMode === m ? "active" : ""}`}
-                    onClick={() => updateConfig({ uiMode: m })}
-                  >
-                    {m === "classic" ? "Classic" : "Advanced"}
-                  </button>
-                ))}
-              </div>
-              <p className="font-mono text-[0.68rem]" style={{ color: "var(--text3)" }}>
-                Classic is this single-window layout. Advanced adds a &quot;Pop Out&quot;/&quot;New Window&quot;
-                pair next to the refresh button, letting you undock the radar into its own window — with a
-                search bar and its own settings — and open as many independent radar and current-conditions
-                windows as you like. Advanced mode also restores whichever radar/conditions windows you had
-                open the next time you launch the app.
-              </p>
-            </div>
-
-            <div className="settings-bar-section">
               <div className="settings-bar-label">TOP GLOW SWEEP</div>
               <div className="settings-bar-group">
                 <button
@@ -339,6 +304,10 @@ export function SettingsDialog({
 
           <TabsContent value="alerts" className="pt-4">
             <AlertTypesPanel />
+          </TabsContent>
+
+          <TabsContent value="notifications" className="pt-4">
+            <NotificationsPanel location={activeLocation} />
           </TabsContent>
 
           <TabsContent value="radio" className="pt-4">

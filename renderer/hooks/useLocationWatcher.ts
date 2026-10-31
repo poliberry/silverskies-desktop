@@ -1,9 +1,14 @@
 import { useEffect, useRef } from "react";
 import { openMeteoProvider } from "@/lib/providers/open-meteo";
 import { fetchMergedAlerts } from "@/lib/alerts/merge";
-import { detectExpectedSevere, detectNewAlerts, detectNotableForecast } from "@/lib/notifications/rules";
+import {
+  alertNotificationKey,
+  detectExpectedSevere,
+  detectNotableForecast,
+} from "@/lib/notifications/rules";
 import { hasNotified, markNotified } from "@/lib/notifications/dedupe-store";
-import { ipc } from "@/lib/ipc-client";
+import { notifyAlert, notifyToast } from "@/lib/notifications/dispatch";
+import type { NormalizedAlert } from "@/types/alerts";
 import { useSavedLocations } from "./useSavedLocations";
 import { useSettings } from "./useSettings";
 
@@ -40,11 +45,19 @@ export function useLocationWatcher() {
   const { savedLocations } = useSavedLocations();
 
   const savedLocationsRef = useRef(savedLocations);
-  savedLocationsRef.current = savedLocations;
   const libreWxrHostRef = useRef(config?.libreWxrHost);
-  libreWxrHostRef.current = config?.libreWxrHost;
   const willyWeatherApiKeyRef = useRef(config?.willyWeatherApiKey);
-  willyWeatherApiKeyRef.current = config?.willyWeatherApiKey;
+  // Read at dispatch time so changing a sound mid-interval takes effect on
+  // the very next notification without restarting the timer.
+  const configRef = useRef(config);
+  // Synced after render rather than during it (React disallows ref writes
+  // mid-render); the interval below only ever reads them later anyway.
+  useEffect(() => {
+    savedLocationsRef.current = savedLocations;
+    libreWxrHostRef.current = config?.libreWxrHost;
+    willyWeatherApiKeyRef.current = config?.willyWeatherApiKey;
+    configRef.current = config;
+  });
 
   useEffect(() => {
     if (!config?.notificationsEnabled) return;
@@ -59,22 +72,26 @@ export function useLocationWatcher() {
         fetchMergedAlerts(loc.lat, loc.lon, libreWxrHost, willyWeatherApiKey),
       ]);
 
-      return [
-        ...detectNewAlerts(loc.id, loc.label, alerts),
-        ...detectNotableForecast(loc.id, loc.label, weather.daily),
-        ...detectExpectedSevere(loc.id, loc.label, weather.hourly),
-      ];
+      return {
+        alerts,
+        forecast: [
+          ...detectNotableForecast(loc.id, loc.label, weather.daily),
+          ...detectExpectedSevere(loc.id, loc.label, weather.hourly),
+        ],
+      };
     }
 
     async function runCheck() {
       for (const loc of savedLocationsRef.current) {
         if (cancelled) return;
         try {
-          const candidates = await checkLocation(loc);
-          for (const c of candidates) {
+          const { alerts, forecast } = await checkLocation(loc);
+          if (cancelled) return;
+          notifyNewAlerts(alerts, loc.label, configRef.current);
+          for (const c of forecast) {
             if (hasNotified(c.key)) continue;
             markNotified(c.key);
-            void ipc.app.notify(c.title, c.body);
+            notifyToast(c.title, c.body, configRef.current);
           }
         } catch {
           // One location failing (offline, bad coordinates, etc.) shouldn't
@@ -91,4 +108,42 @@ export function useLocationWatcher() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- savedLocations/libreWxrHost read via refs so edits mid-interval don't restart the timer
   }, [config?.notificationsEnabled]);
+}
+
+function notifyNewAlerts(
+  alerts: NormalizedAlert[],
+  locationLabel: string,
+  config: Parameters<typeof notifyAlert>[2],
+) {
+  for (const alert of alerts) {
+    const key = alertNotificationKey(alert);
+    if (hasNotified(key)) continue;
+    markNotified(key);
+    notifyAlert(alert, locationLabel, config);
+  }
+}
+
+/**
+ * The location actually on screen isn't necessarily a saved one (a search,
+ * a GPS fix), so the saved-locations watcher above would never notify for
+ * it. Shell already polls alerts for the active location — this just feeds
+ * that same data through the notification pipeline as it arrives. Shares
+ * dedupe keys with the watcher, so an alert seen by both notifies once.
+ */
+export function useActiveLocationAlertNotifications(alerts: NormalizedAlert[] | undefined, locationLabel: string | undefined) {
+  const { config } = useSettings();
+  const enabled = config?.notificationsEnabled ?? false;
+  const configRef = useRef(config);
+  useEffect(() => {
+    configRef.current = config;
+  });
+  const idsKey = (alerts ?? []).map((a) => a.id).join("|");
+
+  useEffect(() => {
+    if (!enabled || !alerts || !locationLabel) return;
+    notifyNewAlerts(alerts, locationLabel, configRef.current);
+    // Re-run only when the set of alert ids changes, not on every refetch
+    // that hands back a new array with the same alerts in it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, idsKey, locationLabel]);
 }

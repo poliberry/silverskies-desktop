@@ -18,7 +18,10 @@
     "build:electron": "tsc -p electron/tsconfig.json",
     "build": "npm run build:renderer && npm run build:electron",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
+    "dist": "npm run build && electron-builder -wml",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:win": "npm run build && electron-builder --win",
     "dist:publish": "npm run build && electron-builder --publish always"
   },
   "dependencies": {
@@ -30,7 +33,7 @@
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",
     "electron": "^38.0.0",
-    "electron-builder": "^25.1.8",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.6.0",
     "wait-on": "^8.0.1"
   },

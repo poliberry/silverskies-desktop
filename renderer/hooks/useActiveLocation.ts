@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_LOCATION, geocode, reverseGeocode } from "@/lib/geocode";
 import { ipGeolocate } from "@/lib/ip-geolocate";
 import type { SavedLocation } from "@/types/settings";
@@ -40,13 +40,18 @@ export function useActiveLocation() {
   const [isLocating, setIsLocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  // Bumped by every user-initiated selection. A GPS/IP lookup that resolves
+  // after the user has already picked something else (the startup lookup
+  // can take several seconds) must not overwrite that choice.
+  const selectionSeq = useRef(0);
 
   /** GPS failed (or isn't available) — try city-level IP geolocation before
    * giving up entirely, since that's the common case in Electron on
    * Windows (see lib/ip-geolocate.ts) rather than an actual denial. */
   const fallBackToIp = useCallback(
-    async (rawError: string | null, opts: { silentFallback?: boolean }) => {
+    async (rawError: string | null, opts: { silentFallback?: boolean }, seq: number) => {
       const ipResult = await ipGeolocate();
+      if (seq !== selectionSeq.current) return;
       if (ipResult) {
         setAdhoc({ ...ipResult, isGps: false });
         setGeoError(null);
@@ -62,11 +67,12 @@ export function useActiveLocation() {
   );
 
   const requestGps = useCallback((opts: { silentFallback?: boolean } = {}) => {
+    const seq = ++selectionSeq.current;
     setMode("adhoc");
     setGeoError(null);
 
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      void fallBackToIp("Geolocation isn't supported by this browser.", opts);
+      void fallBackToIp("Geolocation isn't supported by this browser.", opts, seq);
       return;
     }
 
@@ -76,12 +82,14 @@ export function useActiveLocation() {
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
         const label = await reverseGeocode(lat, lon);
+        if (seq !== selectionSeq.current) return;
         setAdhoc({ lat, lon, label, isGps: true });
         setIsLocating(false);
         void setActiveLocation(null);
       },
       (err) => {
-        void fallBackToIp(friendlyGeoErrorMessage(err), opts);
+        if (seq !== selectionSeq.current) return;
+        void fallBackToIp(friendlyGeoErrorMessage(err), opts, seq);
       },
       { timeout: 10_000, maximumAge: 60_000 },
     );
@@ -100,6 +108,8 @@ export function useActiveLocation() {
 
   const selectSaved = useCallback(
     (id: string) => {
+      selectionSeq.current++;
+      setIsLocating(false);
       setMode("saved");
       setSearchError(null);
       void setActiveLocation(id);
@@ -109,15 +119,31 @@ export function useActiveLocation() {
 
   const searchAndSelect = useCallback(
     async (query: string) => {
+      const seq = ++selectionSeq.current;
       setSearchError(null);
       try {
         const result = await geocode(query);
+        if (seq !== selectionSeq.current) return;
         setMode("adhoc");
         setAdhoc({ ...result, isGps: false });
         void setActiveLocation(null);
       } catch (e) {
         setSearchError(e instanceof Error ? e.message : "Location not found.");
       }
+    },
+    [setActiveLocation],
+  );
+
+  /** An already-resolved place (from the omnibox) — no geocoding needed. */
+  const selectPlace = useCallback(
+    (place: { lat: number; lon: number; label: string }) => {
+      selectionSeq.current++;
+      setIsLocating(false);
+      setSearchError(null);
+      setGeoError(null);
+      setMode("adhoc");
+      setAdhoc({ ...place, isGps: false });
+      void setActiveLocation(null);
     },
     [setActiveLocation],
   );
@@ -140,5 +166,6 @@ export function useActiveLocation() {
     requestGps,
     searchAndSelect,
     selectSaved,
+    selectPlace,
   };
 }

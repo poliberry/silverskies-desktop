@@ -6,6 +6,7 @@ import type {
   MapViewBounds,
   SavedLocation,
   UpdaterStatus,
+  WindowBoundsRect,
   WindowLocation,
 } from "./types";
 
@@ -35,7 +36,8 @@ const api = {
     openExternal: (url: string): Promise<void> => ipcRenderer.invoke("app:openExternal", url),
     setOverlayIcon: (dataUrl: string | null, description: string): Promise<void> =>
       ipcRenderer.invoke("app:setOverlayIcon", dataUrl, description),
-    notify: (title: string, body: string): Promise<void> => ipcRenderer.invoke("app:notify", title, body),
+    notify: (title: string, body: string, opts?: { silent?: boolean }): Promise<void> =>
+      ipcRenderer.invoke("app:notify", title, body, opts ?? {}),
   },
   updater: {
     check: (): Promise<void> => ipcRenderer.invoke("updater:check"),
@@ -68,6 +70,9 @@ const api = {
     // access to renderer/'s alert types).
     openAlert: (alert: unknown): Promise<void> => ipcRenderer.invoke("windows:openAlert", alert),
     getAlertPayload: (token: string): Promise<unknown> => ipcRenderer.invoke("windows:getAlertPayload", token),
+    // Severe/Extreme alerts — an always-on-top pop-up card per alert id.
+    openAlertPopup: (alertId: string, payload: unknown): Promise<void> =>
+      ipcRenderer.invoke("windows:openAlertPopup", alertId, payload),
     // Fire-and-forget: a radar window announces its active location whenever
     // it changes; main relays it only to that instance's paired Conditions
     // window (if one is open), so no response/ack is meaningful here.
@@ -113,6 +118,18 @@ const api = {
       return () => ipcRenderer.removeListener("windows:primaryAuditLogClosed", listener);
     },
     isPrimaryAuditLogOpen: (): Promise<boolean> => ipcRenderer.invoke("windows:isPrimaryAuditLogOpen"),
+    // Bento tile pop-outs — one window per tile id, always tracking the main
+    // window's location. Shell learns which tiles are out on mount via
+    // getOpenTiles, and redocks each one as its window closes.
+    openTile: (opts: { tileId: string; location?: WindowLocation | null; bounds?: WindowBoundsRect }): Promise<void> =>
+      ipcRenderer.invoke("windows:openTile", opts),
+    closeTile: (tileId: string): Promise<void> => ipcRenderer.invoke("windows:closeTile", tileId),
+    getOpenTiles: (): Promise<string[]> => ipcRenderer.invoke("windows:getOpenTiles"),
+    onTileClosed: (callback: (tileId: string) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, tileId: string) => callback(tileId);
+      ipcRenderer.on("windows:tileClosed", listener);
+      return () => ipcRenderer.removeListener("windows:tileClosed", listener);
+    },
     openBrowser: (opts: { url: string; title?: string }): Promise<void> =>
       ipcRenderer.invoke("windows:openBrowser", opts),
     openWeatherRadio: (opts: { instanceId: string; location?: WindowLocation | null }): Promise<void> =>

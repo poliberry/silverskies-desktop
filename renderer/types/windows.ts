@@ -5,7 +5,18 @@
 /** A window's "kind" — every non-main window carries its own independent
  * radar/conditions/audit-log state. "alert" windows are transient (token
  * handoff only) and are never persisted/restored across launches. */
-export type WindowRole = "main" | "radar" | "conditions" | "alert" | "auditLog" | "browser" | "weatherRadio";
+export type WindowRole =
+  | "main"
+  | "radar"
+  | "conditions"
+  | "alert"
+  | "auditLog"
+  | "browser"
+  | "weatherRadio"
+  // A Severe/Extreme alert's always-on-top pop-up — transient, like "alert".
+  | "alertPopup"
+  /** A single bento tile popped out of the main window's canvas. */
+  | "tile";
 
 export interface WindowLocation {
   lat: number;
@@ -38,6 +49,8 @@ export interface SessionWindowEntry {
    * "main" sentinel) whose location it tracks. */
   pairedInstanceId?: string;
   isPrimaryPopout?: boolean;
+  /** Only for role "tile". */
+  tileId?: string;
   location?: WindowLocation | null;
   bounds?: WindowBoundsRect;
 }

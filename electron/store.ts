@@ -99,8 +99,8 @@ class JsonStore<T extends object> {
 
 export const locationsStore = new JsonStore<LocationsFile>("locations.json", DEFAULT_LOCATIONS);
 export const configStore = new JsonStore<ConfigFile>("config.json", DEFAULT_CONFIG);
-// Snapshot of currently-open radar/conditions pop-out windows (role,
-// instance pairing, last-known location, bounds) — restored on launch when
-// uiMode is "advanced". See registerWindowIpcHandlers/saveSessionSnapshot
-// in main.ts.
+// Snapshot of currently-open pop-out windows (radar/conditions/audit-log
+// instances and bento tile pop-outs — role, instance pairing, last-known
+// location, bounds) — restored on launch. See saveSessionSnapshot and
+// app.whenReady() in main.ts.
 export const sessionStore = new JsonStore<SessionFile>("session.json", DEFAULT_SESSION);

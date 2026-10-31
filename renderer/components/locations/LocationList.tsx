@@ -13,8 +13,8 @@ export interface LocationListProps {
 export function LocationList({ locations, activeId, onSelect, onRemove }: LocationListProps) {
   if (!locations.length) {
     return (
-      <div className="geo-notice" style={{ fontSize: "0.75rem" }}>
-        No saved locations yet. Search for a place or use GPS, then “Save this location” below.
+      <div className="text-xs text-muted-foreground p-2">
+        No saved locations yet.
       </div>
     );
   }

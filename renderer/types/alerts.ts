@@ -1,3 +1,13 @@
+/** Handed to a Severe/Extreme alert's always-on-top pop-up window (see
+ * windows:openAlertPopup in electron/main.ts). */
+export interface AlertPopupPayload {
+  alert: NormalizedAlert;
+  /** Which saved/active location it was found for. */
+  locationLabel: string;
+  /** A Settings "test" pop-up — labelled as such and never escalates. */
+  isTest?: boolean;
+}
+
 export type AlertSource = "nws" | "eccc" | "librewxr" | "bom" | "spc";
 
 /** GeoJSON-ish geometry, loosely typed so we don't need a full @types/geojson

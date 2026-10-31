@@ -34,7 +34,7 @@ import { AqiBadge } from "./overlays/AqiBadge";
 import { RadarStationsLayer } from "./RadarStationsLayer";
 import { WindBarbsLayer } from "./WindBarbsLayer";
 import { StationInfoPanel } from "./StationInfoPanel";
-import { CARTO_DARK, CARTO_LIGHT, CARTO_ATTRIB } from "@/lib/basemap-tiles";
+import { OSM_STANDARD, OSM_ATTRIB, OSM_DARK_CLASS } from "@/lib/basemap-tiles";
 
 // Fixed zoom level used for background tile preloading (saved locations,
 // the ring around the active one) — independent of whatever zoom the user
@@ -738,7 +738,14 @@ export function LeafletRadarMap({
           style={{ background: "var(--bg)" }}
           attributionControl
         >
-          <TileLayer url={theme === "light" ? CARTO_LIGHT : CARTO_DARK} attribution={CARTO_ATTRIB} />
+          {/* OSM standard raster (keyless). OSM ships light tiles only, so in
+              dark mode a CSS invert/hue-rotate (OSM_DARK_CLASS) turns them
+              into a dark basemap under the radar overlay. */}
+          <TileLayer
+            url={OSM_STANDARD}
+            attribution={OSM_ATTRIB}
+            className={theme === "light" ? undefined : OSM_DARK_CLASS}
+          />
           {/* Selecting a station swaps the general composite radar for that
               station's own real single-site WMS product, directly on this
               same map (docked or pop-out — both render through here) rather

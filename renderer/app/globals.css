@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "leaflet/dist/leaflet.css";
+@import "react-grid-layout/css/styles.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -223,6 +224,16 @@ body {
   50% { transform: translateY(-6px); }
 }
 
+/* ── Bundled Google v3 weather icons (see components/icons/WeatherIcon.tsx) ──
+   WeatherIcon renders both the dark- and light-background variants; CSS
+   picks the one matching <html data-theme>. Dark is the default look (no
+   attribute or data-theme="dark"); light mode flips to the light variant. */
+.weather-icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.weather-icon img { display: block; width: 100%; height: 100%; }
+.weather-icon .weather-icon-light { display: none; }
+[data-theme="light"] .weather-icon .weather-icon-dark { display: none; }
+[data-theme="light"] .weather-icon .weather-icon-light { display: block; }
+
 /* ── Google weather icon sizes ─────────────────────────────────────── */
 .gw-icon-lg { width: 150px; height: 150px; display: block; }
 .gw-icon-md { width: 40px; height: 40px; display: inline-block; }
@@ -258,7 +269,7 @@ body {
 
 /* ── Top ambient glow bar ───────────────────────────────────────────── */
 #top-glow {
-  position: fixed; top: 0; left: 0; right: 0; height: 4px; z-index: 9999;
+  position: fixed; bottom: 0; left: 0; right: 0; height: 4px; z-index: 9999;
   pointer-events: none; --tg: var(--a0);
   background: rgba(var(--tg), 1);
   box-shadow:
@@ -599,7 +610,7 @@ body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
 .hour-pop { font-family: var(--mono); font-size: 0.68rem; color: #64aaff; margin-top: 3px; }
 
 /* ── Forecast ─────────────────────────────────────────────────────── */
-.forecast-row { display: grid; grid-template-columns: 60px 24px 1fr auto auto; align-items: center; gap: 8px; padding: 9px 12px; }
+.forecast-row { display: grid; grid-template-columns: 60px 24px 1fr auto auto; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 999; background: var(--card); }
 .forecast-row.today { border-color: rgba(var(--a0), 0.2); }
 .forecast-day { font-size: 0.85rem; font-weight: 600; }
 .forecast-row.today .forecast-day { color: var(--accent2); }
@@ -703,6 +714,10 @@ body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
    buffer layer's opacity once its tiles are loaded) instead of an instant
    opacity snap. Harmless elsewhere — base-map tiles don't animate opacity. */
 .leaflet-tile { transition: opacity 220ms linear; }
+/* OSM publishes light raster tiles only — in dark mode the basemap
+   TileLayer carries this class (see lib/basemap-tiles.ts) so the tiles
+   render as a dark basemap under the radar overlay. */
+.osm-dark-tiles { filter: invert(100%) hue-rotate(180deg) brightness(0.95) contrast(0.92); }
 .leaflet-control-attribution {
   background: rgba(var(--surface-rgb), 0.7) !important; color: var(--text3) !important;
   font-family: var(--mono); font-size: 0.62rem !important;
@@ -783,3 +798,175 @@ body.severe-warning { animation: severePulse 3s ease-in-out infinite; }
   0%, 100% { opacity: 0.7; }
   50% { opacity: 1; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   BENTO CANVAS — the main window's draggable/resizable tile grid (see
+   components/bento). Tiles are rounded glass panels, unlike the square
+   .glass-card chrome used by pop-out windows.
+   ═══════════════════════════════════════════════════════════════════ */
+.bento-cell { display: flex; }
+.bento-tile {
+  position: relative;
+  display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0;
+  border-radius: calc(var(--radius) * 1.8);
+  background: color-mix(in srgb, var(--card) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--foreground) 9%, transparent);
+  box-shadow: 0 1px 0 0 color-mix(in srgb, white 5%, transparent) inset, 0 8px 24px -12px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(18px) saturate(1.2);
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.bento-tile:hover { border-color: var(--border-active); }
+
+.bento-tile-header {
+  display: flex; align-items: center; gap: 6px;
+  height: 34px; flex-shrink: 0;
+  padding: 0 8px 0 6px;
+}
+.bento-tile-icon { font-size: 0.85rem; color: var(--text3); }
+.bento-tile-title {
+  font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.bento-tile-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.bento-tile-action {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: var(--radius);
+  color: var(--text3); background: none; border: none; cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.bento-tile-action:hover, .bento-tile-action.active { color: var(--accent2); background: var(--accent-glow); }
+
+.bento-tile-body { flex: 1; min-height: 0; padding: 0 12px 12px; }
+.bento-tile-body-flush { padding: 0; }
+/* The audit log brings its own header row (see AlertLog's headerLeading) */
+.bento-tile:has(.bento-tile-header-inline) .bento-tile-body { padding-top: 6px; }
+
+/* Drag grip — only shown (and only a drag handle) while the canvas is editable */
+.bento-grip {
+  display: none; align-items: center; justify-content: center;
+  width: 16px; height: 22px; margin-right: -2px; flex-shrink: 0;
+  color: var(--text3); opacity: 0.5; transition: opacity 0.15s, color 0.15s;
+}
+.bento-grid-editable .bento-grip { display: inline-flex; }
+.bento-grid-editable .bento-drag-handle { cursor: grab; }
+.bento-grid-editable .bento-tile:hover .bento-grip { opacity: 1; color: var(--accent2); }
+.react-draggable-dragging .bento-drag-handle { cursor: grabbing; }
+.react-draggable-dragging .bento-tile {
+  border-color: var(--border-active);
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(var(--a0), 0.35);
+}
+
+/* Drop target preview */
+.bento-grid .react-grid-item.react-grid-placeholder {
+  background: rgba(var(--a0), 0.18);
+  border: 1px dashed rgba(var(--a0), 0.6);
+  border-radius: calc(var(--radius) * 1.8);
+  opacity: 1;
+}
+
+/* Resize handles — a soft corner arc on SE, invisible edge strips on E/S */
+.bento-grid .react-grid-item > .react-resizable-handle { opacity: 0; z-index: 5; transition: opacity 0.15s; }
+.bento-grid .react-grid-item:hover > .react-resizable-handle,
+.bento-grid .react-grid-item.resizing > .react-resizable-handle { opacity: 1; }
+.bento-grid .react-grid-item > .react-resizable-handle::after { border-color: var(--accent2); }
+.bento-grid .react-grid-item > .react-resizable-handle.react-resizable-handle-se { right: 2px; bottom: 2px; }
+.bento-grid .react-grid-item > .react-resizable-handle.react-resizable-handle-se::after {
+  right: 5px; bottom: 5px; width: 8px; height: 8px;
+  border-right-width: 2px; border-bottom-width: 2px; border-bottom-right-radius: 4px;
+}
+.bento-grid .react-grid-item > .react-resizable-handle.react-resizable-handle-e,
+.bento-grid .react-grid-item > .react-resizable-handle.react-resizable-handle-s { transform: none; margin: 0; }
+.bento-grid .react-grid-item > .react-resizable-handle.react-resizable-handle-e { top: 20%; height: 60%; width: 8px; right: 0; }
+.bento-grid .react-grid-item > .react-resizable-handle.react-resizable-handle-s { left: 20%; width: 60%; height: 8px; bottom: 0; }
+.bento-grid .react-grid-item > .react-resizable-handle.react-resizable-handle-e::after,
+.bento-grid .react-grid-item > .react-resizable-handle.react-resizable-handle-s::after {
+  border: none; border-radius: 999px; background: var(--accent2); opacity: 0.6;
+}
+.bento-grid .react-grid-item > .react-resizable-handle.react-resizable-handle-e::after { right: 2px; top: 50%; width: 3px; height: 28px; margin-top: -14px; bottom: auto; }
+.bento-grid .react-grid-item > .react-resizable-handle.react-resizable-handle-s::after { bottom: 2px; left: 50%; height: 3px; width: 28px; margin-left: -14px; right: auto; }
+/* Leaflet eats pointer events mid-resize otherwise, stalling the gesture */
+.bento-grid .react-grid-item.resizing .leaflet-container,
+.bento-grid .react-grid-item.react-draggable-dragging .leaflet-container { pointer-events: none; }
+
+/* Nested cards inside a tile shed their own frame — the tile is the frame */
+.bento-tile .sun-card { border: none; background: transparent; padding: 4px 0 0; }
+.bento-tile .info-card { background: color-mix(in srgb, var(--card) 18%, transparent); border-radius: var(--radius); }
+.bento-tile .forecast-row { border-radius: var(--radius); background: color-mix(in srgb, var(--card) 18%, transparent); }
+
+.bento-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: 64px 16px; color: var(--text3); text-align: center;
+}
+.bento-empty .ph { font-size: 2rem; opacity: 0.6; }
+
+/* A popped-out tile fills its whole window (see TileWindow.tsx) */
+.bento-tile-window {
+  margin: 6px; border-radius: calc(var(--radius) * 1.8);
+}
+.bento-tile-window .bento-tile-header { height: 38px; }
+
+/* ── Omnibox ────────────────────────────────────────────────────────── */
+.omnibox-panel { animation: omniboxIn 0.12s ease-out; }
+@keyframes omniboxIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.omnibox-row {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 6px; padding: 7px 10px; border-radius: var(--radius);
+  cursor: pointer; user-select: none;
+}
+.omnibox-row.active { background: var(--accent-glow); }
+.omnibox-row-icon {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  color: var(--text2); font-size: 0.95rem;
+}
+.omnibox-row.active .omnibox-row-icon { color: var(--accent2); background: rgba(var(--a0), 0.18); }
+.omnibox-row-tag {
+  flex-shrink: 0; font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text3);
+}
+.omnibox-row-enter { flex-shrink: 0; font-family: var(--mono); font-size: 0.75rem; color: var(--accent2); }
+
+/* ── Severe/Extreme alert pop-up (see AlertPopupWindow.tsx) ─────────── */
+.alert-popup {
+  position: relative; display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--ac, #ff3b3b) 22%, transparent), transparent 60%),
+    var(--bg);
+  border: 1px solid color-mix(in srgb, var(--ac, #ff3b3b) 55%, transparent);
+  border-radius: 14px;
+}
+.alert-popup-stripe {
+  position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--ac, #ff3b3b);
+}
+.alert-popup-extreme { animation: alertPopupPulse 1.6s ease-in-out infinite; }
+@keyframes alertPopupPulse {
+  0%, 100% { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ac, #ff3b3b) 40%, transparent); }
+  50% { box-shadow: inset 0 0 0 3px var(--ac, #ff3b3b), inset 0 0 40px color-mix(in srgb, var(--ac, #ff3b3b) 30%, transparent); }
+}
+.alert-popup-severity {
+  display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--ac, #ff3b3b); color: #fff;
+  font-family: var(--mono); font-size: 0.66rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+}
+.alert-popup-title { font-size: 1.35rem; font-weight: 600; line-height: 1.2; color: var(--text); }
+.alert-popup-body {
+  font-size: 0.82rem; line-height: 1.4; color: var(--text2);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.alert-popup-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+  border-radius: var(--radius); background: none; border: none; color: var(--text3); cursor: pointer;
+}
+.alert-popup-icon-btn:hover:not(:disabled) { color: var(--text); background: var(--surface); }
+.alert-popup-primary {
+  flex: 1; height: 34px; border-radius: var(--radius); border: none; cursor: pointer;
+  background: var(--ac, #ff3b3b); color: #fff; font-size: 0.82rem; font-weight: 600;
+}
+.alert-popup-primary:hover { filter: brightness(1.1); }
+html:has(.alert-popup), body:has(.alert-popup) { background: transparent !important; }

@@ -20,6 +20,10 @@ export interface LocationsFile {
   activeLocationId: string | null;
 }
 
+/** Built-in synthesized notification sounds, "custom" (a user-supplied
+ * audio file, stored renderer-side), or "none". */
+export type NotificationSoundId = "none" | "chime" | "ping" | "bell" | "attention" | "siren" | "klaxon" | "custom";
+
 export type UiModePref = "classic" | "advanced";
 
 export interface ConfigFile {
@@ -38,6 +42,16 @@ export interface ConfigFile {
   autoRefreshMinutes: number;
   devToolsEnabled: boolean;
   notificationsEnabled: boolean;
+  /** Extreme/Severe alerts open an always-on-top pop-up window instead of
+   * a regular desktop notification — see AlertPopupWindow. */
+  alertPopupsEnabled: boolean;
+  /** Sound for desktop notifications (alerts below Severe, forecast
+   * heads-ups) — see renderer/lib/notifications/sounds.ts. */
+  notificationSoundAdvisory: NotificationSoundId;
+  /** Sound for the Severe/Extreme alert pop-up. */
+  notificationSoundSevere: NotificationSoundId;
+  /** 0–1. */
+  notificationVolume: number;
   /** SPC Day 1 Categorical Convective Outlook — radar outline overlay plus
    * an alerts-panel banner when the active location falls inside a risk
    * category. */
@@ -46,8 +60,9 @@ export interface ConfigFile {
    * decorative, so it's the one visual toggle that lives in General rather
    * than tied to any particular data feed. */
   topGlowEnabled: boolean;
-  /** "classic" is today's single-window layout; "advanced" surfaces the
-   * radar pop-out/multi-instance affordances. */
+  /** @deprecated No longer read — every bento tile can be popped out on its
+   * own, so there's no separate "advanced" mode anymore. Kept so existing
+   * config.json files still type-check. */
   uiMode: UiModePref;
   /** Per alert-type (keyed by the `cssClass` taxonomy from lib/alerts/classify.ts)
    * visibility/color overrides for the radar map's alert-polygon layer —

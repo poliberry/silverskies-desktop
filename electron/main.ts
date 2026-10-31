@@ -1,4 +1,4 @@
-import { app, BrowserWindow, WebContentsView, ipcMain, Notification, nativeImage, nativeTheme, session, shell } from "electron";
+import { app, BrowserWindow, WebContentsView, ipcMain, Notification, nativeImage, nativeTheme, screen, session, shell } from "electron";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import serve from "electron-serve";
@@ -59,6 +59,11 @@ interface TrackedWindow {
    * browser:chromeHeight IPC handler) instead of trusting the
    * BROWSER_CHROME_HEIGHT fallback to stay in sync with two files forever. */
   browserRelayout?: (chromeHeight: number) => void;
+  /** Only for role "tile" — which bento tile this window shows. */
+  tileId?: string;
+  /** Only for role "alertPopup" — the alert it's showing, so the same alert
+   * never stacks a second pop-up. */
+  alertId?: string;
 }
 
 const windows = new Map<number, TrackedWindow>();
@@ -150,7 +155,13 @@ const WINDOW_DEFAULTS: Record<WindowRole, { width: number; height: number; minWi
   auditLog: { width: 420, height: 700, minWidth: 340, minHeight: 420 },
   browser: { width: 1100, height: 800, minWidth: 500, minHeight: 400 },
   weatherRadio: { width: 360, height: 460, minWidth: 320, minHeight: 380 },
+  // Normally opened at the tile's own on-screen size (see windows:openTile)
+  // — these only apply when no bounds are passed.
+  tile: { width: 520, height: 420, minWidth: 260, minHeight: 160 },
+  alertPopup: { width: 420, height: 300 },
 };
+
+const ALERT_POPUP_MARGIN = 16;
 
 // Fallback height (in CSS px) used for the "browser" role's embedded
 // WebContentsView only until the chrome renderer reports its own real,
@@ -181,6 +192,10 @@ interface CreateAppWindowOptions {
    * WebContentsView, and a title for the chrome renderer's toolbar. */
   browserUrl?: string;
   browserTitle?: string;
+  /** Only for role "tile". */
+  tileId?: string;
+  /** Only for role "alertPopup". */
+  alertId?: string;
 }
 
 /** Loads external content (a radar-station page, an IEM VTEC event, an SPC
@@ -245,22 +260,47 @@ function createAppWindow(opts: CreateAppWindowOptions): BrowserWindow {
     minWidth: defaults.minWidth,
     minHeight: defaults.minHeight,
     backgroundColor: "#0d0d0f", // matches --bg, avoids a white flash on load
+    // Severe/Extreme alert pop-ups: a fixed-size card that stays above
+    // everything (including full-screen apps) until dismissed.
+    ...(opts.role === "alertPopup"
+      ? {
+          resizable: false,
+          minimizable: false,
+          maximizable: false,
+          fullscreenable: false,
+          alwaysOnTop: true,
+          skipTaskbar: false,
+          // The card draws its own rounded, bordered frame.
+          transparent: true,
+          backgroundColor: "#00000000",
+          hasShadow: true,
+        }
+      : {}),
     autoHideMenuBar: true,
     // Every window draws its own titlebar (drag region + minimize/maximize/
     // close, via the windowControls:* IPC below) instead of the OS chrome —
     // `thickFrame` (Windows-only, defaults true) keeps the native resizable
     // border/shadow/Aero-Snap behavior even though the title bar itself is
     // custom-drawn.
-    frame: false,
+    titleBarStyle: 'hidden',
+    trafficLightPosition: { x: 10, y: 10 },
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Notification sounds play from background timers (the alert
+      // watcher) and freshly opened pop-ups, never from a user gesture —
+      // Chromium's default policy would silently block both.
+      autoplayPolicy: "no-user-gesture-required",
     },
   });
 
   wireCommonWindowBehavior(win);
+  if (opts.role === "alertPopup") {
+    win.setAlwaysOnTop(true, "screen-saver");
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
 
   const tracked: TrackedWindow = {
     win,
@@ -268,6 +308,8 @@ function createAppWindow(opts: CreateAppWindowOptions): BrowserWindow {
     instanceId: opts.instanceId,
     pairedInstanceId: opts.pairedInstanceId,
     location: opts.location ?? null,
+    tileId: opts.tileId,
+    alertId: opts.alertId,
   };
   windows.set(win.id, tracked);
 
@@ -283,11 +325,13 @@ function createAppWindow(opts: CreateAppWindowOptions): BrowserWindow {
   if (opts.isPrimaryPopout) query.set("isPrimaryPopout", "1");
   if (opts.browserUrl) query.set("url", opts.browserUrl);
   if (opts.browserTitle) query.set("title", opts.browserTitle);
+  if (opts.tileId) query.set("tile", opts.tileId);
 
   if (isDev) {
     const qs = query.toString();
     win.loadURL(qs ? `${DEV_URL}/?${qs}` : DEV_URL);
-    win.webContents.openDevTools({ mode: "detach" });
+    // A detached DevTools window per alert pop-up would bury the pop-up itself.
+    if (opts.role !== "alertPopup") win.webContents.openDevTools({ mode: "detach" });
   } else {
     loadProdApp(win, query);
   }
@@ -344,6 +388,10 @@ function createAppWindow(opts: CreateAppWindowOptions): BrowserWindow {
       primaryAuditLogPopoutWindowId = null;
       broadcastToAll("windows:primaryAuditLogClosed");
     }
+    // Lets Shell put the tile back into its grid slot.
+    if (closedTracked?.role === "tile" && closedTracked.tileId) {
+      broadcastToAll("windows:tileClosed", closedTracked.tileId);
+    }
     // The window is already destroyed by the time "closed" fires (its
     // contentView tree, including any embedded browserView, is torn down
     // along with it) — just drop our own reference so nothing here keeps
@@ -384,7 +432,13 @@ async function saveSessionSnapshot() {
     // look something up) and aren't worth restoring either. The weather
     // radio window is a singleton utility panel with no per-instance state
     // worth restoring — reopened from the toolbar each launch instead.
-    if (tracked.role === "alert" || tracked.role === "browser" || tracked.role === "weatherRadio") continue;
+    if (
+      tracked.role === "alert" ||
+      tracked.role === "alertPopup" ||
+      tracked.role === "browser" ||
+      tracked.role === "weatherRadio"
+    )
+      continue;
     if (tracked.win.isDestroyed()) continue;
     const b = tracked.win.getBounds();
     entries.push({
@@ -393,25 +447,10 @@ async function saveSessionSnapshot() {
       pairedInstanceId: tracked.pairedInstanceId,
       isPrimaryPopout:
         tracked.win.id === primaryPopoutWindowId || tracked.win.id === primaryAuditLogPopoutWindowId,
+      tileId: tracked.tileId,
       location: tracked.location ?? null,
       bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
     });
-  }
-
-  const config = await configStore.read();
-  if (config.uiMode !== "advanced") {
-    // Classic mode never opens pop-outs itself (the UI hides those
-    // affordances), so `entries` here reflects only "main" — saving that
-    // as-is would clobber whatever pop-out layout was last persisted while
-    // in "advanced" mode, and flipping back to "advanced" would then
-    // restore nothing (see the comment where this snapshot is restored, in
-    // app.whenReady()). Preserve the on-disk pop-out entries untouched and
-    // only update "main"'s own bounds.
-    const existing = await sessionStore.read();
-    const preservedPopouts = existing.windows.filter((w) => w.role !== "main");
-    const mainEntry = entries.find((w) => w.role === "main");
-    await sessionStore.write({ windows: mainEntry ? [mainEntry, ...preservedPopouts] : preservedPopouts });
-    return;
   }
 
   await sessionStore.write({ windows: entries });
@@ -532,12 +571,16 @@ function registerIpcHandlers() {
   // Desktop toast notifications for the background saved-locations watcher
   // (new alerts, notable forecasts, heads-up severe weather) — see
   // renderer/hooks/useLocationWatcher.ts for what triggers these.
-  ipcMain.handle("app:notify", (_event, title: string, body: string) => {
+  ipcMain.handle("app:notify", (_event, title: string, body: string, opts: { silent?: boolean } = {}) => {
     if (!Notification.isSupported()) return;
     const notification = new Notification({
       title,
       body,
       icon: nativeImage.createFromPath(ICON_DARK_PATH),
+      // The renderer plays the user's chosen notification sound itself
+      // (see renderer/lib/notifications/sounds.ts) — the OS default ding
+      // on top of it would double up.
+      silent: opts.silent ?? false,
     });
     notification.on("click", () => {
       const mainWindow = getMainWindow();
@@ -649,6 +692,32 @@ function openOrShowWeatherRadioWindow(opts: { instanceId: string; location?: Win
   });
 }
 
+/** One window per bento tile, always paired to the main window's "main"
+ * sentinel so it follows the main window's active location (and, for the
+ * audit-log tile, the main radar's viewport) through the same relays every
+ * other paired window uses. */
+function openOrShowTileWindow(opts: {
+  tileId: string;
+  location?: WindowLocation | null;
+  bounds?: WindowBoundsRect;
+}): BrowserWindow {
+  const existing = [...windows.values()].find((t) => t.role === "tile" && t.tileId === opts.tileId);
+  if (existing) {
+    if (existing.win.isMinimized()) existing.win.restore();
+    existing.win.show();
+    existing.win.focus();
+    return existing.win;
+  }
+  return createAppWindow({
+    role: "tile",
+    instanceId: randomUUID(),
+    pairedInstanceId: "main",
+    tileId: opts.tileId,
+    location: opts.location ?? null,
+    bounds: opts.bounds,
+  });
+}
+
 function registerWindowIpcHandlers() {
   ipcMain.handle(
     "windows:openRadar",
@@ -705,6 +774,27 @@ function registerWindowIpcHandlers() {
     },
   );
 
+  ipcMain.handle(
+    "windows:openTile",
+    (_event, opts: { tileId: string; location?: WindowLocation | null; bounds?: WindowBoundsRect }) => {
+      openOrShowTileWindow(opts);
+    },
+  );
+
+  // Redocking from the main window's Tiles menu — just closes the pop-out;
+  // its "closed" handler broadcasts windows:tileClosed like any other close.
+  ipcMain.handle("windows:closeTile", (_event, tileId: string) => {
+    for (const tracked of windows.values()) {
+      if (tracked.role === "tile" && tracked.tileId === tileId && !tracked.win.isDestroyed()) tracked.win.close();
+    }
+  });
+
+  // Source of truth for which tiles are currently out — Shell's own state
+  // resets on reload/relaunch, but the windows themselves don't.
+  ipcMain.handle("windows:getOpenTiles", () =>
+    [...windows.values()].filter((t) => t.role === "tile" && t.tileId).map((t) => t.tileId as string),
+  );
+
   ipcMain.handle("windows:openBrowser", (_event, opts: { url: string; title?: string }) => {
     createAppWindow({ role: "browser", browserUrl: opts.url, browserTitle: opts.title });
   });
@@ -750,6 +840,44 @@ function registerWindowIpcHandlers() {
     createAppWindow({ role: "alert", alertToken: token });
   });
 
+  // Severe/Extreme alerts — an always-on-top card stacked down the top-right
+  // corner of the primary display, one per alert. `payload` is opaque here
+  // ({ alert, locationLabel } on the renderer side), handed over through the
+  // same one-time-token mechanism as windows:openAlert.
+  ipcMain.handle("windows:openAlertPopup", (_event, alertId: string, payload: unknown) => {
+    const existing = [...windows.values()].find((t) => t.role === "alertPopup" && t.alertId === alertId);
+    if (existing) {
+      existing.win.showInactive();
+      existing.win.moveTop();
+      return;
+    }
+    const token = randomUUID();
+    pendingAlertPayloads.set(token, payload);
+    setTimeout(() => pendingAlertPayloads.delete(token), 5 * 60_000).unref();
+
+    const { width, height } = WINDOW_DEFAULTS.alertPopup;
+    const area = screen.getPrimaryDisplay().workArea;
+    const openCount = [...windows.values()].filter((t) => t.role === "alertPopup").length;
+    const perColumn = Math.max(1, Math.floor((area.height - ALERT_POPUP_MARGIN) / (height + ALERT_POPUP_MARGIN)));
+    const column = Math.floor(openCount / perColumn);
+    const row = openCount % perColumn;
+    createAppWindow({
+      role: "alertPopup",
+      alertToken: token,
+      alertId,
+      bounds: {
+        x: area.x + area.width - (width + ALERT_POPUP_MARGIN) * (column + 1),
+        y: area.y + ALERT_POPUP_MARGIN + row * (height + ALERT_POPUP_MARGIN),
+        width,
+        height,
+      },
+    });
+
+    // Draw the eye even if the user is in another app.
+    if (process.platform === "darwin") app.dock?.bounce("critical");
+    else getMainWindow()?.flashFrame(true);
+  });
+
   ipcMain.handle("windows:getAlertPayload", (_event, token: string) => {
     // Deliberately *not* deleted on read: React's dev-mode double-invoked
     // effects (and a user simply reloading the alert window) mean this can
@@ -778,7 +906,10 @@ function registerWindowIpcHandlers() {
 
     for (const tracked of windows.values()) {
       if (
-        (tracked.role === "conditions" || tracked.role === "auditLog" || tracked.role === "weatherRadio") &&
+        (tracked.role === "conditions" ||
+          tracked.role === "auditLog" ||
+          tracked.role === "weatherRadio" ||
+          tracked.role === "tile") &&
         tracked.pairedInstanceId === instanceId
       ) {
         tracked.location = location;
@@ -800,7 +931,9 @@ function registerWindowIpcHandlers() {
   ipcMain.on("windows:instanceBoundsChanged", (_event, instanceId: string, bounds: MapViewBounds) => {
     latestBoundsByInstance.set(instanceId, bounds);
     for (const tracked of windows.values()) {
-      if (tracked.role === "auditLog" && tracked.pairedInstanceId === instanceId) {
+      // Tile windows are included for the popped-out audit-log tile; the
+      // other tiles simply don't listen.
+      if ((tracked.role === "auditLog" || tracked.role === "tile") && tracked.pairedInstanceId === instanceId) {
         tracked.win.webContents.send("windows:instanceBounds", bounds);
       }
     }
@@ -898,48 +1031,33 @@ app.whenReady().then(async () => {
   registerWindowIpcHandlers();
   registerWindowControlHandlers();
 
-  const [config, savedSession] = await Promise.all([configStore.read(), sessionStore.read()]);
+  const savedSession = await sessionStore.read();
 
   const mainEntry = savedSession.windows.find((w) => w.role === "main");
   createAppWindow({ role: "main", bounds: mainEntry?.bounds });
 
-  // Pop-out windows are only ever created by the user through the
-  // "advanced" UI's affordances, so only restore them when that's still the
-  // user's preference — flipping back to "classic" simply stops reopening
-  // them (the snapshot itself is left alone, in case they flip back).
-  if (config.uiMode === "advanced") {
-    for (const entry of savedSession.windows) {
-      if (
-        entry.role === "main" ||
-        entry.role === "alert" ||
-        entry.role === "browser" ||
-        entry.role === "weatherRadio"
-      )
-        continue;
-      const win = createAppWindow({
-        role: entry.role,
-        instanceId: entry.instanceId,
-        pairedInstanceId: entry.pairedInstanceId,
-        location: entry.location ?? null,
-        bounds: entry.bounds,
-        isPrimaryPopout: entry.role === "radar" ? entry.isPrimaryPopout : undefined,
-      });
-      // Restores the "undocked" relationship too, not just the window
-      // itself — otherwise a relaunch (or the main window merely reloading,
-      // which re-mounts Shell with fresh React state) would show the main
-      // window's radar/audit-log as docked again even though its pop-out is
-      // still/already open. See windows:isPrimaryRadarOpen/
-      // windows:isPrimaryAuditLogOpen below.
-      if (entry.isPrimaryPopout) {
-        if (entry.role === "radar") primaryPopoutWindowId = win.id;
-        else if (entry.role === "auditLog") primaryAuditLogPopoutWindowId = win.id;
-      }
-    }
-    // A relaunch that restores an already-undocked primary radar should
-    // restore main's hidden state too, not just reopen the pop-out windows
-    // (which, being individually restored above rather than routed back
-    // through windows:openRadar, don't re-trigger the undock cascade itself).
-    if (primaryPopoutWindowId !== null) getMainWindow()?.hide();
+  for (const entry of savedSession.windows) {
+    if (
+      entry.role === "main" ||
+      entry.role === "alert" ||
+      entry.role === "alertPopup" ||
+      entry.role === "browser" ||
+      entry.role === "weatherRadio"
+    )
+      continue;
+    // Legacy "undock the main radar/audit log" pop-outs (from before tiles
+    // could be popped out individually) hid the main window and nothing in
+    // today's Shell knows to redock them — drop them rather than restoring
+    // a hidden main window.
+    if (entry.isPrimaryPopout) continue;
+    createAppWindow({
+      role: entry.role,
+      instanceId: entry.instanceId,
+      pairedInstanceId: entry.pairedInstanceId,
+      tileId: entry.tileId,
+      location: entry.location ?? null,
+      bounds: entry.bounds,
+    });
   }
 
   // Silently checks (never downloads/installs on its own — see

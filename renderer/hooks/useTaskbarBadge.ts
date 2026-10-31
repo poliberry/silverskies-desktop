@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
-import { googleWeatherIconUrl } from "@/lib/icons/google-weather";
+import { wmoWeatherIconUrl } from "@/lib/icons/weather-icons";
 import { wmoLabel } from "@/lib/icons/wmo";
 import { ipc } from "@/lib/ipc-client";
 
 const BADGE_SIZE = 48;
 
 /**
- * Draws the current condition's Pixel Weather glyph onto a small circular
+ * Draws the current condition's bundled Google v3 glyph onto a small circular
  * backing plate and sends it to the main process as the taskbar overlay
  * icon (Windows' `BrowserWindow.setOverlayIcon` — a small badge on the
  * corner of the app's taskbar icon, the same mechanism apps use for
@@ -32,7 +32,6 @@ export function useTaskbarBadge(weatherCode: number | undefined, isDay: boolean 
 
     let cancelled = false;
     const img = new Image();
-    img.crossOrigin = "anonymous";
     img.onload = () => {
       if (cancelled) return;
       const canvas = document.createElement("canvas");
@@ -57,15 +56,14 @@ export function useTaskbarBadge(weatherCode: number | undefined, isDay: boolean 
         const dataUrl = canvas.toDataURL("image/png");
         void ipc.app.setOverlayIcon(dataUrl, wmoLabel(weatherCode));
       } catch {
-        // Tainted canvas (e.g. the icon CDN not sending CORS headers) —
-        // skip the badge rather than throw; the base window icon is
-        // unaffected either way.
+        // Canvas rasterization failed — skip the badge rather than throw;
+        // the base window icon is unaffected either way.
       }
     };
     img.onerror = () => {
-      /* icon CDN unreachable — leave whatever badge was already showing */
+      /* bundled icon missing — leave whatever badge was already showing */
     };
-    img.src = googleWeatherIconUrl(weatherCode, isDay, "dark");
+    img.src = wmoWeatherIconUrl(weatherCode, isDay, "dark");
 
     return () => {
       cancelled = true;

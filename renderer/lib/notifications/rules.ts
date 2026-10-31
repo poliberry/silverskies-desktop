@@ -9,20 +9,12 @@ export interface NotificationCandidate {
   body: string;
 }
 
-const NOTIFIABLE_SEVERITIES = new Set(["Extreme", "Severe", "Moderate"]);
-
-export function detectNewAlerts(
-  locationId: string,
-  locationLabel: string,
-  alerts: NormalizedAlert[],
-): NotificationCandidate[] {
-  return alerts
-    .filter((a) => NOTIFIABLE_SEVERITIES.has(a.severity ?? ""))
-    .map((a) => ({
-      key: `alert:${locationId}:${a.id}`,
-      title: `⚠ ${a.displayEvent}`,
-      body: `${locationLabel} — ${a.headline ?? a.event}`,
-    }));
+/** Every active alert is notified once, whatever its severity — how loudly
+ * is decided by lib/notifications/dispatch.ts (pop-up for Severe/Extreme,
+ * a regular notification below that). Keyed by the alert alone, not the
+ * location: an alert covering two saved locations notifies once. */
+export function alertNotificationKey(alert: Pick<NormalizedAlert, "id">): string {
+  return `alert:${alert.id}`;
 }
 
 /** Tomorrow's forecast — high rain chance or a hazardous condition, once
