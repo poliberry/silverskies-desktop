@@ -140,8 +140,10 @@ jobs:
           mkdir -p stage AppDir
           cp assets/icon-dark.png stage/silverskies.png
           # linuxdeploy has no FUSE on these runners: extract and run AppRun directly.
+          echo "Downloading linuxdeploy..."
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O linuxdeploy.AppImage
-          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage -O linuxdeploy-plugin-appimage.AppImage
+          echo "Downloading linuxdeploy appimage plugin..."
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage -O linuxdeploy-plugin-appimage.AppImage
           chmod +x linuxdeploy*.AppImage
           ./linuxdeploy.AppImage --appimage-extract >/dev/null && mv squashfs-root ld-root
           ./linuxdeploy-plugin-appimage.AppImage --appimage-extract >/dev/null && mv squashfs-root ld-plugin-root
