@@ -1,9 +1,11 @@
 name: Release
 
 # Push a tag matching v* (keep it in sync with the workspace version in
-# Cargo.toml) to build all three platforms and publish a GitHub Release with
-# every binary attached. `workflow_dispatch` builds the same matrix and
-# uploads the archives as workflow artifacts instead.
+# Cargo.toml) to build real installers for all three platforms and publish
+# (or update) the GitHub Release for that tag, with notes generated from
+# every commit since the previous release. `workflow_dispatch` builds the
+# same matrix and uploads the installers as workflow artifacts instead, so
+# the pipeline can be tested without cutting a release.
 on:
   push:
     tags:
@@ -25,22 +27,24 @@ jobs:
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact: silverskies-windows-x86_64.zip
+            asset_key: windows
             bin: silverskies.exe
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact: silverskies-macos-arm64.tar.gz
+            asset_key: macos-arm64
+            dmg_arch: arm64
             bin: silverskies
           # Both macOS architectures build on the same (Apple Silicon)
           # runner: rustup cross-targets x86_64 with no extra setup, which
           # avoids depending on the retired Intel-only macos-13 image.
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact: silverskies-macos-x86_64.tar.gz
+            asset_key: macos-x86_64
+            dmg_arch: x86_64
             bin: silverskies
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact: silverskies-linux-x86_64.tar.gz
+            asset_key: linux
             bin: silverskies
     runs-on: ${{ matrix.os }}
     steps:
@@ -52,8 +56,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      # eframe (glow/winit), cpal (rodio) and tts (speech-dispatcher) need
-      # these system libraries on Linux.
+      # eframe (glow/winit) and rodio/tts need these system libraries on Linux.
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
@@ -62,43 +65,199 @@ jobs:
             libxcb-shape0-dev libxcb-xfixes0-dev libgtk-3-dev libasound2-dev \
             libspeechd-dev libssl-dev pkg-config
 
+      - name: Resolve version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(sed -n 's/^version *= *"\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Release version: $VERSION"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            if [[ "${GITHUB_REF_NAME}" != "v$VERSION" ]]; then
+              echo "::error::tag ${GITHUB_REF_NAME} does not match Cargo.toml version v$VERSION"
+              exit 1
+            fi
+          fi
+
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }} -p silverskies
 
-      - name: Package (Windows)
+      # --- Windows: portable zip + Inno Setup installer ---------------------
+      - name: Package portable zip (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item target/${{ matrix.target }}/release/${{ matrix.bin }} dist/
-          Copy-Item -Recurse assets dist/assets
-          Copy-Item README.md dist/
-          Compress-Archive -Path dist/* -DestinationPath ${{ matrix.artifact }}
+          New-Item -ItemType Directory -Force stage | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/${{ matrix.bin }} stage/
+          Copy-Item README.md stage/
+          Compress-Archive -Path stage/* -DestinationPath "SilverSkies-$env:VERSION-windows-x86_64.zip"
 
-      - name: Package (Unix)
-        if: runner.os != 'Windows'
+      - name: Install Inno Setup (Windows)
+        if: runner.os == 'Windows'
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          mkdir -p dist
-          cp target/${{ matrix.target }}/release/${{ matrix.bin }} dist/
-          cp -r assets dist/assets
-          cp README.md dist/
-          tar -czf ${{ matrix.artifact }} -C dist .
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=$env:VERSION /O"$PWD" /F"SilverSkies-Setup-$env:VERSION" dist\windows\installer.iss
 
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/v')
-        with:
-          files: ${{ matrix.artifact }}
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # --- macOS: .app bundle, .dmg and .zip --------------------------------
+      - name: Package app bundle and disk image (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          APP="dist/Silver Skies.app"
+          rm -rf "$APP" AppIcon.iconset
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" AppIcon.iconset
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "$APP/Contents/MacOS/silverskies"
+          cp dist/macos/Info.plist "$APP/Contents/Info.plist"
+          chmod +x "$APP/Contents/MacOS/silverskies"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$APP/Contents/Info.plist"
+          # Icon set from the 512px source (no 1024px @2x available).
+          sips -z 16 16     assets/icon-dark.png --out AppIcon.iconset/icon_16x16.png >/dev/null
+          sips -z 32 32     assets/icon-dark.png --out AppIcon.iconset/icon_16x16@2x.png >/dev/null
+          sips -z 32 32     assets/icon-dark.png --out AppIcon.iconset/icon_32x32.png >/dev/null
+          sips -z 64 64     assets/icon-dark.png --out AppIcon.iconset/icon_32x32@2x.png >/dev/null
+          sips -z 128 128   assets/icon-dark.png --out AppIcon.iconset/icon_128x128.png >/dev/null
+          sips -z 256 256   assets/icon-dark.png --out AppIcon.iconset/icon_128x128@2x.png >/dev/null
+          sips -z 256 256   assets/icon-dark.png --out AppIcon.iconset/icon_256x256.png >/dev/null
+          sips -z 512 512   assets/icon-dark.png --out AppIcon.iconset/icon_256x256@2x.png >/dev/null
+          sips -z 512 512   assets/icon-dark.png --out AppIcon.iconset/icon_512x512.png >/dev/null
+          iconutil -c icns AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
+          DMG="SilverSkies-${VERSION}-macos-${{ matrix.dmg_arch }}.dmg"
+          ZIP="SilverSkies-${VERSION}-macos-${{ matrix.dmg_arch }}.zip"
+          hdiutil create -volname "Silver Skies" -srcfolder "$APP" -ov -format UDZO "$DMG"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 
-      # Manual `workflow_dispatch` runs are not attached to a tag, so there
-      # is no Release to upload to — keep the archives downloadable from
-      # the workflow run instead.
-      - name: Upload build artifact (manual runs)
+      # --- Linux: AppImage + .deb --------------------------------------------
+      - name: Build AppImage and .deb (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          BIN="target/${{ matrix.target }}/release/${{ matrix.bin }}"
+          mkdir -p stage AppDir
+          cp assets/icon-dark.png stage/silverskies.png
+          # linuxdeploy has no FUSE on these runners: extract and run AppRun directly.
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O linuxdeploy.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage -O linuxdeploy-plugin-appimage.AppImage
+          chmod +x linuxdeploy*.AppImage
+          ./linuxdeploy.AppImage --appimage-extract >/dev/null && mv squashfs-root ld-root
+          ./linuxdeploy-plugin-appimage.AppImage --appimage-extract >/dev/null && mv squashfs-root ld-plugin-root
+          export PATH="$PWD/ld-plugin-root/usr/bin:$PATH"
+          VERSION="$VERSION" ./ld-root/AppRun --appdir AppDir \
+            -e "$BIN" -d dist/linux/silverskies.desktop -i stage/silverskies.png \
+            --output appimage
+          BUILT="$(ls ./*.AppImage | grep -vi linuxdeploy | head -n 1)"
+          mv "$BUILT" "SilverSkies-${VERSION}-x86_64.AppImage"
+          # Hand-rolled .deb (no extra tooling needed on the runner).
+          PKG=deb-root
+          mkdir -p "$PKG/DEBIAN" "$PKG/usr/bin" "$PKG/usr/share/applications" \
+            "$PKG/usr/share/icons/hicolor/512x512/apps"
+          cp "$BIN" "$PKG/usr/bin/silverskies"
+          cp dist/linux/silverskies.desktop "$PKG/usr/share/applications/"
+          cp assets/icon-dark.png "$PKG/usr/share/icons/hicolor/512x512/apps/silverskies.png"
+          cat > "$PKG/DEBIAN/control" <<EOF
+          Package: silverskies
+          Version: $VERSION
+          Architecture: amd64
+          Maintainer: Silver Skies <e993372@staff.poliberry.com>
+          Description: Blazing-fast terminal-styled radar and weather desktop app
+           Silver Skies renders a native GPU window with a monospace, boxed,
+           terminal aesthetic and an embedded command line that drives
+           locations, layout, radar layers, alerts and theming.
+          EOF
+          dpkg-deb --build "$PKG" "silverskies_${VERSION}_amd64.deb"
+
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
-        if: "!startsWith(github.ref, 'refs/tags/v')"
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}
+          name: release-${{ matrix.asset_key }}
+          path: |
+            SilverSkies-*.exe
+            SilverSkies-*.zip
+            SilverSkies-*.dmg
+            SilverSkies-*.AppImage
+            silverskies_*.deb
+          if-no-files-found: error
+
+  release:
+    # Only tag pushes publish to GitHub Releases; manual dispatches stop at
+    # the downloadable workflow artifacts above.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: 'release-*'
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release with changelog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          # Previous release tag (highest version below this one).
+          PREV="$(git tag --list 'v*' --sort=-v:refname | grep -v "^${TAG}$" | head -n 1 || true)"
+          if [[ -n "$PREV" ]]; then
+            RANGE="$PREV..$TAG"
+            COMMITS="$(git log "$RANGE" --pretty=format:'- %s (%h, %an)' | head -n 200)"
+            COUNT="$(git rev-list --count "$RANGE")"
+          else
+            RANGE="$TAG"
+            COMMITS="$(git log "$TAG" --pretty=format:'- %s (%h, %an)' -n 200)"
+            COUNT="$(git rev-list --count "$TAG" | head -n 1)"
+          fi
+          {
+            echo "<!-- changelog:commits -->"
+            echo "## Changes since ${PREV:-the beginning} ($COUNT commits)"
+            echo ""
+            echo "$COMMITS"
+            echo ""
+            echo "<!-- changelog:commits -->"
+          } > changelog-section.md
+
+          NOTES_TMP="$(mktemp)"
+          if gh release view "$TAG" --json body --jq .body > existing.md 2>/dev/null; then
+            if grep -q '<!-- changelog:commits -->' existing.md; then
+              # Refresh our own section in place; keep any hand-written notes.
+              awk '
+                BEGIN { in_section = 0 }
+                /<!-- changelog:commits -->/ {
+                  if (in_section == 0) { while ((getline line < "changelog-section.md") > 0) print line; in_section = 1; next }
+                  else { in_section = 0; next }
+                }
+                in_section == 0 { print }
+              ' existing.md > "$NOTES_TMP"
+            elif [[ -s existing.md ]]; then
+              cat existing.md > "$NOTES_TMP"
+              echo "" >> "$NOTES_TMP"
+              cat changelog-section.md >> "$NOTES_TMP"
+            else
+              {
+                echo "## Silver Skies $VERSION"
+                echo ""
+                cat changelog-section.md
+              } > "$NOTES_TMP"
+            fi
+            gh release edit "$TAG" --notes-file "$NOTES_TMP" --draft=false
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            {
+              echo "## Silver Skies $VERSION"
+              echo ""
+              cat changelog-section.md
+            } > "$NOTES_TMP"
+            gh release create "$TAG" release-assets/* \
+              --title "Silver Skies $VERSION" --notes-file "$NOTES_TMP" --latest
+          fi
+          echo "Published ${TAG} with $(ls release-assets | wc -l) assets."
