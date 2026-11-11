@@ -1547,11 +1547,13 @@ mod tests {
 
     #[test]
     fn scheme_options_uses_loaded_index() {
-        let mut m = WeatherMaps::default();
-        m.color_schemes = vec![ss_core::ColorScheme {
-            id: 9,
-            name: "Custom".into(),
-        }];
+        let m = WeatherMaps {
+            color_schemes: vec![ss_core::ColorScheme {
+                id: 9,
+                name: "Custom".into(),
+            }],
+            ..Default::default()
+        };
         let opts = scheme_options(Some(&m));
         assert_eq!(opts, vec![(9, "Custom".to_string())]);
         let empty = WeatherMaps::default();
