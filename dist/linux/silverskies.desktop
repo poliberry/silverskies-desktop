@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Silver Skies
+Comment=Blazing-fast terminal-styled radar and weather desktop app
+Exec=silverskies
+Icon=silverskies
+Terminal=false
+Type=Application
+Categories=Science;Utility;
+StartupWMClass=silverskies
