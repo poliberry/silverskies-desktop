@@ -2,7 +2,8 @@ name: Release
 
 # Push a tag matching v* (keep it in sync with the workspace version in
 # Cargo.toml) to build all three platforms and publish a GitHub Release with
-# every binary attached. `workflow_dispatch` re-runs the build manually.
+# every binary attached. `workflow_dispatch` builds the same matrix and
+# uploads the archives as workflow artifacts instead.
 on:
   push:
     tags:
@@ -30,7 +31,10 @@ jobs:
             target: aarch64-apple-darwin
             artifact: silverskies-macos-arm64.tar.gz
             bin: silverskies
-          - os: macos-13
+          # Both macOS architectures build on the same (Apple Silicon)
+          # runner: rustup cross-targets x86_64 with no extra setup, which
+          # avoids depending on the retired Intel-only macos-13 image.
+          - os: macos-latest
             target: x86_64-apple-darwin
             artifact: silverskies-macos-x86_64.tar.gz
             bin: silverskies
@@ -88,3 +92,13 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Manual `workflow_dispatch` runs are not attached to a tag, so there
+      # is no Release to upload to — keep the archives downloadable from
+      # the workflow run instead.
+      - name: Upload build artifact (manual runs)
+        uses: actions/upload-artifact@v4
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}

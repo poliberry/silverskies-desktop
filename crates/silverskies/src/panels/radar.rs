@@ -7,7 +7,7 @@ use chrono::{Local, Utc};
 use egui::{vec2, Align, Align2, Color32, FontId, Layout, RichText, Ui};
 use ss_core::alerts::classify::{storm_tier, StormTier};
 use ss_core::alerts::colors::effective_color;
-use ss_core::command::Command;
+use ss_core::command::{Command, RadarCmd};
 use ss_core::theme::{brightness, parse_color};
 use ss_core::{
     BBox, Geometry, PanelKind, RadarProduct, RadarSettings, SpcOutlookFeature, TimeFormat,
@@ -37,7 +37,9 @@ const BARB_MIN_ZOOM: f64 = 6.0;
 const VIEWPORT_ALERTS_MIN_ZOOM: f64 = 4.0;
 const FRAME_SECS: f64 = 0.8;
 const BAR_H: f32 = 26.0;
+const LAYERS_H: f32 = 26.0;
 const LEGEND_H: f32 = 36.0;
+const LAYERS_GAP: f32 = 4.0;
 
 /// One frame of the composite radar loop.
 #[derive(Debug, Clone, PartialEq)]
@@ -411,6 +413,77 @@ fn legend_stops(rs: &RadarSettings) -> Option<Vec<(Color32, &'static str)>> {
     (rs.legend && dbz).then(|| radar_dbz_stops(rs.color_scheme))
 }
 
+/// Color schemes for the layers row: the live index when loaded, else the
+/// built-in list. Pure (no egui) so it can be unit tested.
+pub fn scheme_options(maps: Option<&WeatherMaps>) -> Vec<(u8, String)> {
+    match maps {
+        Some(m) if !m.color_schemes.is_empty() => m
+            .color_schemes
+            .iter()
+            .map(|s| (s.id, s.name.clone()))
+            .collect(),
+        _ => ss_net::librewxr::default_color_schemes()
+            .into_iter()
+            .map(|s| (s.id, s.name))
+            .collect(),
+    }
+}
+
+/// Layer toggle buttons for the floating box: `(label, active, command)`.
+/// Pure (no egui) so it can be unit tested.
+pub fn layer_toggles(rs: &RadarSettings) -> Vec<(&'static str, bool, Command)> {
+    vec![
+        (
+            "SAT",
+            rs.satellite,
+            Command::Layer {
+                name: "satellite".to_string(),
+                on: Some(!rs.satellite),
+            },
+        ),
+        (
+            "PLY",
+            rs.show_polygons,
+            Command::Layer {
+                name: "alerts".to_string(),
+                on: Some(!rs.show_polygons),
+            },
+        ),
+        (
+            "ARW",
+            rs.show_arrows,
+            Command::Layer {
+                name: "arrows".to_string(),
+                on: Some(!rs.show_arrows),
+            },
+        ),
+        (
+            "CEL",
+            rs.show_cells,
+            Command::Layer {
+                name: "cells".to_string(),
+                on: Some(!rs.show_cells),
+            },
+        ),
+        (
+            "STN",
+            rs.show_stations,
+            Command::Layer {
+                name: "sites".to_string(),
+                on: Some(!rs.show_stations),
+            },
+        ),
+        (
+            "BRB",
+            rs.wind_barbs,
+            Command::Layer {
+                name: "barbs".to_string(),
+                on: Some(!rs.wind_barbs),
+            },
+        ),
+    ]
+}
+
 impl Panel for RadarPanel {
     fn kind(&self) -> PanelKind {
         PanelKind::Radar
@@ -455,7 +528,7 @@ impl Panel for RadarPanel {
 
         let stops = legend_stops(&rs);
         let spacing = ui.spacing().item_spacing.y;
-        let mut below = BAR_H + spacing;
+        let mut below = BAR_H + spacing + LAYERS_H + spacing;
         if stops.is_some() {
             below += LEGEND_H + spacing;
         }
@@ -472,8 +545,10 @@ impl Panel for RadarPanel {
         if let Some(slot) = slot {
             let box_h = 8.0
                 + BAR_H
+                + LAYERS_GAP
+                + LAYERS_H
                 + if stops.is_some() {
-                    LEGEND_H + spacing
+                    LAYERS_GAP + LEGEND_H
                 } else {
                     0.0
                 }
@@ -514,7 +589,14 @@ impl Panel for RadarPanel {
                 Layout::left_to_right(Align::Center),
                 |ui| self.control_bar(ui, cx, &rs, &frames),
             );
+            child.add_space(LAYERS_GAP);
+            child.allocate_ui_with_layout(
+                vec2(inner_w, LAYERS_H),
+                Layout::left_to_right(Align::Center),
+                |ui| self.layers_bar(ui, cx, &rs),
+            );
             if let Some(s) = &stops {
+                child.add_space(LAYERS_GAP);
                 draw_color_legend(&mut child, "dBZ", s);
             }
         } else {
@@ -523,7 +605,14 @@ impl Panel for RadarPanel {
                 Layout::left_to_right(Align::Center),
                 |ui| self.control_bar(ui, cx, &rs, &frames),
             );
+            ui.add_space(LAYERS_GAP);
+            ui.allocate_ui_with_layout(
+                vec2(w, LAYERS_H),
+                Layout::left_to_right(Align::Center),
+                |ui| self.layers_bar(ui, cx, &rs),
+            );
             if let Some(s) = &stops {
+                ui.add_space(LAYERS_GAP);
                 draw_color_legend(ui, "dBZ", s);
             }
         }
@@ -734,6 +823,51 @@ impl RadarPanel {
         } else if live {
             ui.label(RichText::new("LIVE").monospace().color(c32(p.a0)));
         }
+    }
+
+    /// Second row of the floating box: color-scheme selector plus layer
+    /// toggles. Emits `:radar scheme` / `:layer` commands so the changes go
+    /// through the normal pipeline (dirty config + log). Wrapped in a
+    /// horizontal scroll so the 240 px docked slot still fits everything.
+    fn layers_bar(&mut self, ui: &mut Ui, cx: &mut PanelCx, rs: &RadarSettings) {
+        let p = cx.palette;
+        let schemes = scheme_options(cx.shared.weather_maps.as_ref());
+        let cur_name = schemes
+            .iter()
+            .find(|(id, _)| *id == rs.color_scheme)
+            .map(|(id, n)| format!("{id}:{n}"))
+            .unwrap_or_else(|| format!("{}", rs.color_scheme));
+        egui::ScrollArea::horizontal()
+            .id_salt("radar_layers_scroll")
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_id_salt("radar_scheme")
+                        .selected_text(RichText::new(cur_name).monospace().size(11.0))
+                        .width(92.0)
+                        .show_ui(ui, |ui| {
+                            for (id, name) in &schemes {
+                                let sel = *id == rs.color_scheme;
+                                if ui.selectable_label(sel, format!("{id}: {name}")).clicked()
+                                    && !sel
+                                {
+                                    cx.emit.push(Command::Radar(RadarCmd::Scheme(*id)));
+                                }
+                            }
+                        });
+                    for (label, active, cmd) in layer_toggles(rs) {
+                        let text = RichText::new(format!("[{label}]")).monospace();
+                        let text = if active {
+                            text.color(c32(p.a0)).strong()
+                        } else {
+                            text.color(c32a(p.text3))
+                        };
+                        if ui.add(egui::Button::new(text)).clicked() {
+                            cx.emit.push(cmd);
+                        }
+                    }
+                });
+            });
     }
 
     /// Auto-load alerts for the visible area when the view moved or the data is old.
@@ -1402,5 +1536,56 @@ mod tests {
         // Zoom out by one level.
         let out = BBox::new(-101.0, 29.0, -97.0, 33.0);
         assert!(wind_request_due(Some((&a, 0.0)), 10.0, &out, true));
+    }
+
+    #[test]
+    fn scheme_options_falls_back_to_builtins() {
+        let opts = scheme_options(None);
+        assert_eq!(opts.len(), 9);
+        assert!(opts.iter().any(|(id, n)| *id == 1 && n == "Original"));
+    }
+
+    #[test]
+    fn scheme_options_uses_loaded_index() {
+        let mut m = WeatherMaps::default();
+        m.color_schemes = vec![ss_core::ColorScheme {
+            id: 9,
+            name: "Custom".into(),
+        }];
+        let opts = scheme_options(Some(&m));
+        assert_eq!(opts, vec![(9, "Custom".to_string())]);
+        let empty = WeatherMaps::default();
+        assert_eq!(scheme_options(Some(&empty)).len(), 9);
+    }
+
+    #[test]
+    fn layer_toggles_reflect_state_and_flip() {
+        let rs = RadarSettings::default();
+        let toggles = layer_toggles(&rs);
+        assert_eq!(toggles.len(), 6);
+        let sat = toggles.iter().find(|(l, _, _)| *l == "SAT").unwrap();
+        assert!(!sat.1);
+        assert_eq!(
+            sat.2,
+            Command::Layer {
+                name: "satellite".to_string(),
+                on: Some(true),
+            }
+        );
+        let mut on = rs.clone();
+        on.satellite = true;
+        on.show_polygons = false;
+        let toggles = layer_toggles(&on);
+        let sat = toggles.iter().find(|(l, _, _)| *l == "SAT").unwrap();
+        assert!(sat.1);
+        assert_eq!(
+            sat.2,
+            Command::Layer {
+                name: "satellite".to_string(),
+                on: Some(false),
+            }
+        );
+        let ply = toggles.iter().find(|(l, _, _)| *l == "PLY").unwrap();
+        assert!(!ply.1);
     }
 }

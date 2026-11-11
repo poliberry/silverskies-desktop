@@ -20,7 +20,8 @@ const GAP: f32 = 8.0;
 const MIN_SIDE_W: f32 = 240.0;
 const CARD_ALPHA: u8 = 232;
 /// Height of the radar backdrop's floating controls slot (bottom-left).
-pub const CONTROLS_H: f32 = 90.0;
+/// Sized for the two-row transport + layers box plus the dBZ legend.
+pub const CONTROLS_H: f32 = 120.0;
 const COLUMNS: [Column; 3] = [Column::Left, Column::Center, Column::Right];
 
 #[derive(Default)]
