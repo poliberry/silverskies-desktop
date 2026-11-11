@@ -1,0 +1,18 @@
+[package]
+name = "ss-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Silver Skies persistence: config.json, locations.json, session.json, notification dedupe store."
+
+[dependencies]
+ss-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+directories.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

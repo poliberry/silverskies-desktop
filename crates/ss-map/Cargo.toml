@@ -1,0 +1,22 @@
+[package]
+name = "ss-map"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Silver Skies slippy-map engine for egui: tile cache, Web Mercator viewport, raster/WMS/polygon/marker layers."
+
+[dependencies]
+ss-core.workspace = true
+egui.workspace = true
+image.workspace = true
+earcutr.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
+parking_lot.workspace = true
+crossbeam-channel.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+sha2 = "0.10"
+
+[dev-dependencies]
+eframe = { workspace = true }

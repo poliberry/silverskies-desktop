@@ -1,191 +1,85 @@
-# Silver Skies (Desktop)
+# Silver Skies
 
-Electron + Next.js + Tailwind + shadcn/ui rebuild of the original single-file Silver Skies
-weather dashboard: a 3-column layout with saved locations, a live LibreWXR/Leaflet radar map
-with alert polygons, a severe-weather "audit log" (NWS + Environment Canada + global WMO/CAP
-via LibreWXR), and the original app's forecast/current-conditions sidebar — styled with the same
-dark-glass, condition-tinted design system as the source HTML.
+A blazing-fast, terminal-styled radar and weather desktop app, written entirely in Rust.
+
+Silver Skies renders a native GPU window (egui/eframe) with a monospace, boxed, terminal
+aesthetic and an embedded `:` command line that drives everything — locations, layout, radar
+layers, alerts, theming, and the weather radio. Every panel can be moved between columns, hidden,
+or popped out into its own OS window, and you can open as many independent radar windows as you
+like.
+
+## Features
+
+- **Global radar** — LibreWXR (RainViewer-compatible) composite radar with past frames + nowcast,
+  playback timeline, nine color schemes, storm cells/arrows, satellite infrared, and a dBZ legend.
+- **NEXRAD single-site products** (US) — super-res reflectivity, velocity, hydrometeor
+  classification, storm-total and 1-hour accumulation via NCEP WMS, with range rings, VCP status
+  and live/stale indicators.
+- **Alerts everywhere** — NWS (US), Environment Canada, BOM via WillyWeather (AU), SPC mesoscale
+  discussions and convective outlooks, and WMO/CAP feeds worldwide via LibreWXR, merged and
+  de-duplicated into one audit log.
+- **Alert polygons** — zone-based advisories drawn as outlined fills; **storm-based warnings**
+  (tornado, severe thunderstorm, flash flood; PDS, emergency and confirmed tiers) drawn as an
+  emphasized, pulsing "storm" layer above them.
+- **Weather alerts over TTS** — newly arrived alerts for your active (and optionally all saved)
+  locations are read aloud with native text-to-speech, preceded by the SAME attention tone, with
+  a severity filter and adjustable speech rate. Any alert can be spoken on demand (`:speak`).
+- **Weather radio** — simulated NOAA Weather Radio (TTS + tones) or a live NWR stream chosen by
+  distance, with real-time SAME header decoding from the audio.
+- **Current conditions & 7-day / hourly forecast** (Open-Meteo, no key needed; AccuWeather
+  optional), today's outlook, UV, wind barbs from METARs, OpenWeatherMap overlays and AQI.
+- **Terminal UI** — movable/hideable/pop-out panels, slot-based layout persisted between runs,
+  built-in and custom JSON themes (plus condition-tinted default accent), 12/24h and °F/°C,
+  desktop notifications, and command-line completion/history.
+
+## Commands
+
+Press `:` (or `Ctrl+K`) to open the command bar. A few examples:
+
+```
+:goto Tucson, AZ          :add                     :units c
+:move radar right 0       :hide forecast           :popout audit-log
+:radar new                :product velocity        :site kfsx
+:layer satellite on       :radar scheme 4          :play
+:alerts                   :speak 2                 :radio live
+:theme nord-blue          :set tts.enabled true    :help
+```
+
+`:help` lists everything; `Tab` completes commands and arguments.
+
+## Building
+
+Requires a stable Rust toolchain (1.80+).
+
+```
+cargo run --release -p silverskies
+```
+
+On Linux you need the usual egui/cpal/speech-dispatcher system libraries:
+`libxkbcommon-dev libwayland-dev libgtk-3-dev libasound2-dev libspeechd-dev`.
 
 ## Project layout
 
-- `electron/` — the Electron main process (TypeScript, compiled to `dist-electron/`): window
-  creation, IPC handlers, and the local JSON persistence layer (`store.ts`).
-- `renderer/` — the Next.js app (App Router, static export via `output: 'export'`), everything
-  you see on screen.
-
-Two separate `package.json`/`node_modules` on purpose — `renderer/` is a self-contained Next.js
-project; the root `package.json` is the Electron shell that hosts it.
+```
+crates/
+  ss-core/      pure domain logic: alert taxonomy & colors, units, WMO codes, themes,
+                SAME encoder/decoder, geometry, command grammar  (fully unit tested)
+  ss-net/       API clients: NWS, ECCC, LibreWXR, SPC, Open-Meteo, Nominatim, OWM, NCEP, NWR
+  ss-store/     config.json / locations.json / session.json, atomic writes, dedupe store
+  ss-audio/     tone synthesis, native TTS, live stream player
+  ss-map/       slippy-map engine for egui: tile cache, Mercator viewport, raster/WMS/polygon/
+                marker/wind-barb layers
+  silverskies/  the eframe application: windows, panels, command bar, theming, background runtime
+```
 
 ## Local data
 
-Two JSON files live in the OS user-data directory (Windows:
-`%APPDATA%\silver-skies-desktop\`):
+JSON files live in the OS config directory (Windows: `%APPDATA%\silverskies\Silver Skies\config\`):
+`config.json`, `locations.json`, `session.json`, `dedupe.json`. All writes are atomic. Existing
+settings from the Electron version (`%APPDATA%\silver-skies-desktop\`) are migrated on first run.
 
-- `locations.json` — your saved locations + which one is active.
-- `config.json` — weather provider choice, your AccuWeather API key (if you use one), units,
-  time format, theme, auto-refresh interval, and the LibreWXR radar host.
+## Data sources
 
-Both are written atomically (temp file + rename) so a crash mid-write can't corrupt them.
-
-## Weather providers
-
-- **Open-Meteo** (default) — no key required.
-- **AccuWeather** — add your own key in Settings. Free-tier keys are capped at 50 calls/day;
-  the app caches the resolved AccuWeather location key per saved location to avoid burning
-  quota on repeat geoposition lookups.
-
-Severe-weather alerts (NWS, Environment Canada, Australia's Bureau of Meteorology, SPC Mesoscale
-Discussions, and LibreWXR's global WMO/CAP feed for everywhere else) are always fetched
-independently of whichever weather provider is selected.
-
-**A note on the BOM integration** (`lib/alerts/willyweather.ts`): BOM doesn't publish a usable
-third-party API itself (the "BOM Weather" app's own JSON feed is explicitly marked "you must not
-use, copy or share it", and the public bom.gov.au website/RSS feeds actively block automated
-requests), so Australian warnings go through [WillyWeather's public, documented
-API](https://www.willyweather.com.au/api/docs/warnings.html) instead, which re-publishes the same
-underlying BOM warning data. Requires your own WillyWeather API key (Settings) — there's no
-documented free tier, so this is opt-in and silently skipped without a key.
-
-**SPC Mesoscale Discussions** (`lib/alerts/spc-md.ts`): forecaster situational-awareness products
-that often precede a severe thunderstorm/tornado watch. They aren't part of NWS's `/alerts/active`
-CAP feed at all, so polygon geometry comes from SPC's public ArcGIS layer
-(`mapservices.weather.noaa.gov/.../spc_mesoscale_discussion`) and the full discussion text is
-cross-referenced from the NWS Products API by MD number — that API oddly files these under the
-sub-product code "MCD" rather than SPC's office id, which took some digging to find. Fetched
-wherever NWS alerts are (CONUS), and their polygons render on the radar map alongside real alerts.
-
-## Radar (LibreWXR)
-
-Defaults to the public instance at `https://api.librewxr.net` — no setup required. If you
-later self-host LibreWXR (see [librewxr.net](https://librewxr.net)), point Settings →
-"LibreWXR Radar Host" at your own server URL instead.
-
-## Radar stations (WSR-88D)
-
-An opt-in map layer (Radar → Layers → "Radar Stations") showing all 159 US NEXRAD (WSR-88D)
-sites, sourced from the official, keyless NWS API (`api.weather.gov/radar/stations`) — that's
-also where the scan time, VCP, and operability status shown in each station's info panel come
-from. Clicking a station swaps the radar map's own layer — the same map, docked or pop-out, not
-a separate dialog — to that site's real single-site data: five Level 3 products (Reflectivity,
-Velocity, Hydrometeor Classification, Storm Total Precip, 1-Hr Accumulation) via NOAA/NCEP's
-public GeoServer WMS (`opengeo.ncep.noaa.gov`, confirmed against its own GetCapabilities — no key
-needed, CORS open). An info panel floats over the map with the product picker, the station's
-current wind, and a decorative sweep animation pinned to the station's own location (a real
-Leaflet marker, so it pans/zooms with the map — not geo-synced to a real antenna azimuth though,
-no free feed exposes that). US-only by design: this is NOAA's own network, and there's no
-equivalent free, individually-viewable radar-site imagery for the rest of the world the way
-there is for NEXRAD. "FastScan" labels VCPs that include supplemental SAILS/MESO-SAILS low-level
-scans — the closest real, documented NEXRAD concept to that name.
-
-## Development
-
-```bash
-npm install                # root (Electron) deps
-npm run install:renderer   # renderer (Next.js) deps — deliberately a separate step, not a
-                            # postinstall hook, since nesting the two npm processes is what
-                            # caused Windows CI to hit file-lock EPERM errors during cleanup
-npm run dev                # runs `next dev` and Electron together, with hot reload
-```
-
-## Building / packaging
-
-```bash
-npm run build               # next build (static export) + compile the Electron main process
-npm run pack                 # ...then electron-builder --dir (unpacked, for quick local testing)
-npm run dist                  # ...then electron-builder (this platform only, doesn't publish)
-npm run dist:publish          # ...then electron-builder --publish always (uploads to a GH Release)
-```
-
-Artifacts land in `release/`. electron-builder only ever builds for the OS it's actually running
-on (it can't cross-compile a signed/native macOS build from Windows, etc.) — see below for
-building all three from CI.
-
-### Code signing
-
-Not configured with a certificate by default. electron-builder picks up code-signing automatically
-from environment variables if you set them before running `npm run dist`/`dist:publish` — no
-config changes needed either way:
-- **Windows**: `CSC_LINK` (path/URL to a .pfx) + `CSC_KEY_PASSWORD`.
-- **macOS**: `CSC_LINK` (path/URL to a .p12) + `CSC_KEY_PASSWORD`; add `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD`
-  / `APPLE_TEAM_ID` for notarization on top of that.
-
-Unsigned macOS/Linux builds work fine for personal use — macOS will show an "unidentified
-developer" Gatekeeper prompt (right-click → Open past it) since it isn't notarized.
-
-### Multi-platform release builds (GitHub Actions)
-
-`.github/workflows/release.yml` builds Windows, macOS, and Linux on their own native runners
-(a matrix job — electron-builder can't cross-compile another OS's installer) and publishes every
-artifact to a GitHub Release, using electron-builder's own GitHub publish support (no separate
-release-creation step needed). To cut a release:
-
-```bash
-# bump "version" in package.json first, then:
-git tag v1.1.0
-git push origin v1.1.0
-```
-
-The tag push triggers the workflow (`workflow_dispatch` is also enabled, for re-running a build
-without pushing a new tag). It needs no extra secrets — the default `GITHUB_TOKEN` GitHub Actions
-provides already has permission to create the release and upload assets (`permissions: contents:
-write` in the workflow). Add the code-signing environment variables above as repo/org secrets if
-you want signed builds out of that pipeline too.
-
-### Auto-update
-
-`electron-updater` is wired up (`main.ts` calls `checkForUpdates()` on launch, packaged builds
-only) and `publish.owner`/`publish.repo` in `package.json` point at this repo — installed builds
-will silently check this repo's GitHub Releases on launch, but never download or install anything
-without you saying so: `autoDownload` and `autoInstallOnAppQuit` are both off.
-
-Settings → About is where you act on that: version + Electron/Chromium/Node/platform details, a
-manual "Check for Updates" button, and — once a check finds something — a "Download Update" button,
-then a "Restart & Install" button once the download finishes. Live status (checking, available,
-downloading with percent, downloaded, error, or a plain explanation when running an
-unpackaged/dev build, which has no update feed at all) comes from `main.ts` forwarding
-`electron-updater`'s own events over IPC, with the last-known status cached so reopening the tab
-after the fact still reflects it correctly.
-
-### App icon
-
-`assets/icon-light.png` / `assets/icon-dark.png` — the window/taskbar icon swaps between them
-live as the OS theme changes (`electron/main.ts`, via `nativeTheme`), and `icon-dark.png` doubles
-as the static icon baked into the installer/exe (`build.win.icon`). The taskbar icon also gets a
-small live overlay badge (Windows) showing the current condition's Pixel Weather glyph.
-
-## Notifications
-
-Desktop toast notifications (Settings → Notifications) for:
-
-- **New alerts** — any Severe/Extreme-or-higher alert appearing for a saved location.
-- **Notable forecasts** — ≥60% precipitation chance or a hazardous condition in tomorrow's
-  forecast.
-- **Heads-up severe weather** — a hazardous condition (thunderstorm, heavy rain/snow, ice) showing
-  up in the next 12 hours of the hourly forecast, even before an official alert exists.
-
-A background watcher (`hooks/useLocationWatcher.ts`) checks every *saved* location every 10
-minutes — not just whichever one is on screen — and de-dupes what it's already notified about in
-`localStorage` so the same thing doesn't fire twice. It always queries Open-Meteo for this,
-regardless of the provider selected in Settings, so it doesn't eat into an AccuWeather key's
-50-calls/day quota.
-
-This watcher deliberately does *not* also drive the full-window severe-alert color pulse — that
-stays scoped to whichever location is actually on screen (same as the original app), so switching
-to a clean saved location always immediately clears it. An earlier version fed the watcher into
-the pulse too, which meant leaving an alerting location for a clean one could still show that
-*previous* location's pulse — technically correct (another saved location still had it), but with
-nothing on screen indicating why, so it just read as broken.
-
-## Today's outlook
-
-A single, plain, unclickable line at the top of the audit log (`lib/forecast-outlook.ts`,
-`components/alerts/TodayOutlookRow.tsx`) — deliberately styled nothing like the real alert cards
-below it (no border, no card, no severity color, not expandable) since it isn't one: it's a
-locally-derived note about the active location's own forecast for today, covering rain chance,
-wind, and any hazardous condition. Only appears when there's actually something worth a mention
-(≥40% rain chance, ≥~25 mph wind, or a hazardous WMO code) — an ordinary calm day shows nothing.
-
-## Kept from the original app
-
-The alert-demo panel and the "Asteroid Impact Warning" easter egg both made the trip — they live
-under Settings → Dev Tools.
+Open-Meteo, api.weather.gov (NWS/SPC/NEXRAD metadata), Environment and Climate Change Canada,
+LibreWXR, NOAA NCEP GeoServer, OpenStreetMap/Nominatim, CARTO basemaps, OpenWeatherMap (optional
+key), WillyWeather (optional key), noaaweatherradio.org.
